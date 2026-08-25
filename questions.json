@@ -1,0 +1,102 @@
+{
+  "_comment": "The 8 known-answer questions were written from the endorsements BEFORE any search was run. A chunk counts as correct only if its text carries BOTH `marker` (the identifier asked about) and `answer_marker` (the span that answers) - so a chunk holding the exclusion code without its rule, or the rule without the code, is not a hit.",
+  "questions": [
+    {
+      "qid": "Q1",
+      "question": "Does exclusion E-17 apply to water damage from a burst supply line under HO-0304?",
+      "gold_form": "HO-0304",
+      "gold_clause": "Clause 3",
+      "marker": "E-17",
+      "answer_marker": "burst supply line",
+      "known_answer": "No. E-17 excludes seepage lasting 14 days or more, but carries an express exception for a sudden and accidental discharge including a burst supply line, provided the loss is reported within 30 days.",
+      "from_table": true
+    },
+    {
+      "qid": "Q2",
+      "question": "The dwelling was left vacant and the pipes froze. Is that loss excluded under HO-0304?",
+      "gold_form": "HO-0304",
+      "gold_clause": "Clause 3",
+      "marker": "E-18",
+      "answer_marker": "maintain heat",
+      "known_answer": "Excluded under E-18, unless the insured used reasonable care to maintain heat, or shut off the water supply and drained the system.",
+      "from_table": true
+    },
+    {
+      "qid": "Q3",
+      "question": "Is granule loss on a shingle roof covered, or is it treated as cosmetic damage?",
+      "gold_form": "HO-0455",
+      "gold_clause": "Clause 3",
+      "marker": "E-21",
+      "answer_marker": "water-shedding",
+      "known_answer": "Excluded under E-21 as cosmetic damage that does not compromise the water-shedding function, unless the Cosmetic Damage Buy-Back is shown in the Declarations.",
+      "from_table": true
+    },
+    {
+      "qid": "Q4",
+      "question": "Can the insured run a small home office and keep coverage under the home business exclusion?",
+      "gold_form": "HO-2199",
+      "gold_clause": "Clause 2",
+      "marker": "E-33",
+      "answer_marker": "$10,000",
+      "known_answer": "Yes. E-33 excludes business losses but excepts an incidental office occupancy with no employees and no customer visits where annual gross receipts do not exceed $10,000.",
+      "from_table": true
+    },
+    {
+      "qid": "Q5",
+      "question": "What percentage of replacement cost is paid for a 12-year-old asphalt shingle roof?",
+      "gold_form": "HO-0455",
+      "gold_clause": "Clause 2",
+      "marker": "60%",
+      "answer_marker": "11 to 15 years",
+      "known_answer": "60% - the 11 to 15 year band of the HO-0455 Payment Schedule.",
+      "from_table": true
+    },
+    {
+      "qid": "Q6",
+      "question": "What is the water damage deductible per occurrence under the limited water damage endorsement?",
+      "gold_form": "HO-0304",
+      "gold_clause": "Clause 1",
+      "marker": "$2,500",
+      "answer_marker": "Water Damage Deductible",
+      "known_answer": "$2,500 per occurrence, reduced to $1,000 where a licensed plumber's inspection report dated within 12 months of the loss is produced.",
+      "from_table": true
+    },
+    {
+      "qid": "Q7",
+      "question": "How much ordinance or law coverage does the increased-amount endorsement provide?",
+      "gold_form": "HO-0612",
+      "gold_clause": "Clause 1",
+      "marker": "25%",
+      "answer_marker": "Coverage A",
+      "known_answer": "25% of the Coverage A limit, up from 10% in the base wording, as additional insurance.",
+      "from_table": false
+    },
+    {
+      "qid": "Q8",
+      "question": "How is 'sudden and accidental' defined for the purposes of these endorsements?",
+      "gold_form": "HO-0788",
+      "gold_clause": "Clause 2",
+      "marker": "unexpected and unintended",
+      "answer_marker": "identifiable point in time",
+      "known_answer": "An event both unexpected and unintended from the insured's standpoint that begins at an identifiable point in time; a slow weep or drip is not sudden and accidental even if it later worsens abruptly.",
+      "from_table": false
+    }
+  ],
+  "unanswerable": [
+    "What is the reserve-setting threshold for claim CLM-2024-88431?",
+    "Who is the assigned adjuster for policy HO-99213, and what is their direct phone number?",
+    "What is the current reinsurance attachment point for our homeowners book this treaty year?"
+  ],
+  "answerable": [
+    "Q1",
+    "Q6",
+    "Q7"
+  ],
+  "filter_demo": {
+    "query": "Does the seepage exclusion apply to water escaping from a burst supply line, and how many days does it take to trigger?",
+    "field": "policy_line",
+    "value": "HO-3"
+  },
+  "bonus_question": "A supply line under the kitchen sink burst while the family was away for three weeks. The water ran the entire time and was only found when they got home. Is the loss covered under HO-0304?",
+  "_answerable_note": "Q1/Q6/Q7 are the three run through generation: each retrieves its gold chunk at rank 1. Q5 is deliberately NOT used here - see results.md section 7, where its failure is diagnosed rather than hidden."
+}

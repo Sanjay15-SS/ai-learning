@@ -1,0 +1,4 @@
+fastembed==0.5.1        # BAAI/bge-small-en-v1.5 embeddings, ONNX, local CPU
+chromadb>=0.5.23        # vector database: in-memory HNSW index + metadata filtering
+numpy==2.2.1            # imported directly by embeddings.py and store.py
+pypdf==5.1.0            # only if the endorsement drop arrives as PDF (current forms are .md)

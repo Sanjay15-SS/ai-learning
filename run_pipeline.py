@@ -20,11 +20,22 @@ The 8 questions are data, not code: see questions.json.
 import json
 from types import SimpleNamespace
 
-from src import (EMBED_MODEL, QUESTIONS_PATH, RESULTS_PATH, STRATEGIES,
+from functools import partial
+
+from src import (EMBED_MODEL, QUESTIONS_PATH, RESULTS_WEEK3_PATH, STRATEGIES,
                  STRATEGY_LABELS, DATA_DIR)
-from src.generator import answer
+from src.generator import answer as _answer
 from src.indexer import get_store, ingest
-from src.retriever import get_chunk, search
+from src.retriever import get_chunk
+from src.retriever import search as _search
+
+# Week 4 changed the package default to the hybrid retriever. This is the WEEK 3
+# deliverable, so it is pinned to the dense retriever it was measured with, and it
+# writes results-week3.md - results.md is Week 4's. Re-running this reproduces the
+# Week 3 numbers exactly instead of silently restating them under a new retriever.
+RESULTS_PATH = RESULTS_WEEK3_PATH
+search = partial(_search, mode="dense")
+answer = partial(_answer, mode="dense")
 
 TOP_K = 5
 
@@ -39,7 +50,6 @@ FILTER_QUERY = _Q["filter_demo"]["query"]
 FILTER_FIELD = _Q["filter_demo"]["field"]
 FILTER_VALUE = _Q["filter_demo"]["value"]
 BONUS_QUESTION = _Q["bonus_question"]
-
 
 def is_hit(hits, q):
     """A hit = a top-5 chunk from the right FORM whose TEXT carries BOTH the

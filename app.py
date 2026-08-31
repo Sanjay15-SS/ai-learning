@@ -3,13 +3,13 @@
     python app.py "Does E-17 apply to a burst supply line under HO-0304?"
     python app.py "..." --strategy baseline
     python app.py "..." --policy-line HO-3
-    python app.py --chunk structure_aware::HO-0304::010
+    python app.py --chunk structure_aware::HO-0304@03-24::010
 
 run_pipeline.py is the graded deliverable; this is for poking at the index by hand.
 """
 import argparse
 
-from src import STRATEGIES, TOP_K
+from src import RETRIEVAL_MODE, STRATEGIES, TOP_K
 from src.generator import answer
 from src.indexer import ingest
 from src.retriever import get_chunk
@@ -20,6 +20,7 @@ def main() -> None:
     ap.add_argument("question", nargs="?", help="the question to ask")
     ap.add_argument("--strategy", default="structure_aware", choices=list(STRATEGIES))
     ap.add_argument("--top-k", type=int, default=TOP_K)
+    ap.add_argument("--mode", default=RETRIEVAL_MODE, help="retriever: dense (Week 3) or hybrid (Week 4: BM25 + RRF)")
     ap.add_argument("--policy-line", default=None, help="metadata filter, e.g. HO-3")
     ap.add_argument("--chunk", metavar="CHUNK_ID",
                     help="resolve a chunk_id back to its indexed text and exit")
@@ -47,10 +48,11 @@ def main() -> None:
         return
 
     filters = {"policy_line": args.policy_line} if args.policy_line else None
-    res = answer(args.question, strategy=args.strategy, top_k=args.top_k, filters=filters)
+    res = answer(args.question, strategy=args.strategy, top_k=args.top_k, filters=filters,
+                 mode=args.mode)
 
     print("\n" + ("REFUSED" if res["refused"] else "ANSWER") +
-          f"   (gate={res['gate']}, top_score={res['top_score']})\n")
+          f"   (mode={args.mode}, gate={res['gate']}, top_score={res['top_score']})\n")
     print(res["answer"])
     if res["reason"]:
         print(f"\nreason: {res['reason']}")

@@ -1,646 +1,833 @@
-# Task Set D — Results
+# Week 4 — Task Set D — Results
 
-Insurance claims RAG. Two chunking strategies over the same 6 new endorsements, the same embedding model, and the same 8 known-answer questions.
+**Label the failures, then buy back hit-rate@3 with exactly one change.**
 
-- Embedding model: `BAAI/bge-small-en-v1.5` (384-dim bi-encoder) — **held fixed across both runs**, so the only variable is the chunker.
-- Answering: extractive — the answer is quoted verbatim from the cited chunk, never composed by a model, so it cannot state anything the cited chunk does not.
-- Vector database: **Chroma** (embedded), one collection per strategy, **HNSW** index in cosine space
-- Retrieval: top-K = 5; `policy_line` filtering is executed by the database as a `where` clause, not post-filtered in Python
+Headline: baseline hit-rate@3 **9/12** → after the one change **8/12**, p50 latency **67.9 ms → 43.9 ms**. The change did not buy back hit-rate@3. Section 9 is the shipping decision and section 5 is why this was still the right change to test.
 
-## 0. Scope of this ingest
+## 0. The stack — what is actually running
 
-**Only the 6 new endorsements were indexed.** The base homeowners policy wording library was not re-indexed and was not read by this pipeline. The endorsement drop is the unit of work; re-indexing the library would have spent the whole session on plumbing and produced no measurement.
+| Component | What it is |
+|---|---|
+| Embedding model | `BAAI/bge-small-en-v1.5` — a 384-dim **bi-encoder**, run locally on CPU through `fastembed` (ONNX). Same model in both runs. |
+| Vector database | **Chroma**, in-process, HNSW index in cosine space. |
+| Lexical index | **BM25** (`src/bm25.py`), Lucene-style idf, k1=1.5, b=0.75, plain numpy. |
+| Chunking | Week 3 `structure_aware` chunker — one chunk per exclusion-table row, each stamped with form number, edition, policy line, clause. Unchanged this week. |
+| **Generation LLM** | **None. There is no LLM in this pipeline.** The answer is quoted verbatim from the cited chunk by `src/generator.py`, and the refusal is a gate in code. |
 
-| Strategy | Chunks | Of which single exclusion/table rows |
+**Why no LLM, and why that does not weaken this task.** The graded metric is hit-rate@3 — a *retrieval* metric that asks whether the known-correct chunk is in the top-3. No generator can change it. The generator matters only for the R-vs-G split, and an extractive generator makes that split sharper, not softer: when the gold chunk is in the top-3 and the output still does not come from it, there is no 'the model hallucinated' excuse available — the answer step demonstrably had the right context and quoted a different chunk. That is G, on the definition in the task statement, and no retrieval change fixes it. Everything runs locally with no API key and no network.
+
+Corpus: **99 chunks** from 8 endorsement files. The Week 3 drop was 6 forms; Week 4 adds **two further editions of HO-0304** (ed. 09-23 and ed. 01-25) alongside the existing ed. 03-24, because the failure in the task statement — *'does exclusion E-17 apply under form HO-0304 ed. 03-24'* — cannot exist in a corpus holding only one edition of the form. The three editions say materially different things about E-17 (21 days / 14 days / 14 days + a shut-off-device condition), so retrieving the wrong edition is a wrong coverage answer, not a cosmetic miss.
+
+Every number below: same 12 questions, same index, same chunker, same embedding model, top-3, 7 latency reps per question. The **only** variable between the before and after columns is `RETRIEVAL_MODE`.
+
+## 1. The golden set — 12 real adjuster questions with known-correct chunk_ids
+
+Source: `golden_set.jsonl`. These are desk questions — the ones that arrive as *"what does E-22 say on the roof form"*, not questions written to make the retriever look good. **7 of 12 carry an exact token dense retrieval is structurally bad at** (the requirement is 4): an exclusion code, a form number, an edition. Four of them (G01–G04) turn on the *edition*, which is where a bi-encoder has nothing at all to work with.
+
+| # | Question | Gold chunk_id | Exact token(s) |
+|---|---|---|---|
+| G01 | Does exclusion E-17 apply under form HO-0304 ed. 03-24? | `structure_aware::HO-0304@03-24::010` | `E-17, HO-0304 ed. 03-24` |
+| G02 | HO-0304 ed. 03-24, E-18: insured left the house vacant over winter and a pipe froze. Excluded if they kept the heat on? | `structure_aware::HO-0304@03-24::011` | `E-18, HO-0304 ed. 03-24` |
+| G03 | What is the seepage trigger period for E-17 on the 09-23 edition of HO-0304? | `structure_aware::HO-0304@09-23::010` | `E-17, HO-0304 ed. 09-23` |
+| G04 | Under HO-0304 ed. 01-25, does the E-17 burst supply line exception still apply if no shut-off device was installed? | `structure_aware::HO-0304@01-25::010` | `E-17, HO-0304 ed. 01-25` |
+| G05 | What does E-22 exclude on endorsement HO-0455 ed. 01-24? | `structure_aware::HO-0455@01-24::010` | `E-22, HO-0455 ed. 01-24` |
+| G06 | Is there a buy-back for E-32 under HO-2199 ed. 02-24? | `structure_aware::HO-2199@02-24::004` | `E-32, HO-2199 ed. 02-24` |
+| G07 | DP-0431 ed. 04-24 E-17 - is there any sudden and accidental exception on the dwelling fire form? | `structure_aware::DP-0431@04-24::007` | `E-17, DP-0431 ed. 04-24` |
+| G08 | Insured says hail knocked granules off the shingles but the roof is not leaking. Covered, or cosmetic? | `structure_aware::HO-0455@01-24::009` | — |
+| G09 | Asphalt shingle roof, 12 years old, hail loss. What percentage of replacement cost do we pay? | `structure_aware::HO-0455@01-24::005` | — |
+| G10 | Policyholder runs a bookkeeping business from a spare bedroom, no staff, no clients on site, about $8k a year. Does the business exclusion knock out the claim? | `structure_aware::HO-2199@02-24::005` | — |
+| G11 | What definition of sudden and accidental do we apply when reading the seepage exclusion's exception? | `structure_aware::HO-0788@05-24::002` | — |
+| G12 | After the ordinance or law increase endorsement, what is the cap on increased cost of construction? | `structure_aware::HO-0612@06-24::005` | — |
+
+A 13th question is carried in `probes.jsonl` and is **not** counted in hit-rate@3: it asks about an edition of HO-0304 that is not in the drop, and exists to exercise the Not-In-Corpus label (section 4.3).
+
+## 2. Baseline hit-rate@3 — written down before anything was changed
+
+Frozen to `baseline_record.json` at `2026-08-31T12:37:04+00:00` by `python3 run_week4.py --freeze`, before `src/bm25.py` existed:
+
+```json
+{"mode": "dense", "hit_rate_at_3": "9/12", "p50_ms": 24.17, "chunks": 99}
+```
+
+### Baseline: **9/12 = 75%** hit-rate@3 (dense only, the Week 3 retriever)
+
+| # | Gold in top-3? | Gold rank (dense) | Answer quoted from gold? | Label |
+|---|---|---|---|---|
+| G01 | **NO** | not in top-25 | no | `R` |
+| G02 | **yes** | 3 | no | `G` |
+| G03 | **yes** | 3 | no | `G` |
+| G04 | **yes** | 1 | yes | `PASS` |
+| G05 | **NO** | not in top-25 | no | `R` |
+| G06 | **yes** | 1 | yes | `PASS` |
+| G07 | **yes** | 3 | no | `G` |
+| G08 | **yes** | 2 | no | `G` |
+| G09 | **NO** | 4 | no | `R` |
+| G10 | **yes** | 1 | no | `G` |
+| G11 | **yes** | 1 | yes | `PASS` |
+| G12 | **yes** | 1 | yes | `PASS` |
+
+Answer-from-gold is 4/12 — much worse than hit-rate@3. That gap is the whole point of section 4: most of what a user would call a wrong answer is not a retrieval failure at all.
+
+## 3. The inspection view
+
+`src/inspect_view.py` + `inspect_query.py`. For one question it shows every candidate the retriever considered, the rank **each stage** gave it, where the gold chunk actually landed, and which chunk the answer was quoted from. The label is computed from those facts, never from whether the answer text looked plausible.
+
+```
+$ python3 inspect_query.py --qid G01 --mode dense
+Q: Does exclusion E-17 apply under form HO-0304 ed. 03-24?
+mode=dense  gold=structure_aware::HO-0304@03-24::010  gold_rank=None  hit@3=False  answer_ok=False  label=R (R)
+exact tokens in question: ['E-17', 'HO-0304', '03-24']  (top-3 chunks carrying all of them: 0/3)
+candidates (final order):
+   1. dense#1(0.779)  structure_aware::HO-2199@02-24::005
+      HO-2199 ed.02-24 Clause 2: | E-33 | Any loss arising out of a business conducted on the residence premises, includ...
+   2. dense#2(0.766)  structure_aware::HO-2199@02-24::002
+      HO-2199 ed.02-24 Clause 2: | E-30 | Any loss to covered property occurring during a home-sharing occupancy | Build...
+   3. dense#3(0.761)  structure_aware::HO-2199@02-24::006
+      HO-2199 ed.02-24 Clause 2: | E-34 | Loss to property held for rental to others, or to furnishings provided for the...
+   4. dense#4(0.754)  structure_aware::HO-2199@02-24::004
+      HO-2199 ed.02-24 Clause 2: | E-32 | Bodily injury or property damage arising out of a home-sharing occupancy | Sec...
+   5. dense#5(0.746)  structure_aware::HO-2199@02-24::003
+      HO-2199 ed.02-24 Clause 2: | E-31 | Theft or mysterious disappearance of personal property during a home-sharing o...
+  gold structure_aware::HO-0304@03-24::010 not within the 25 candidates
+answer quoted from: structure_aware::HO-2199@02-24::005
+evidence: gold `structure_aware::HO-0304@03-24::010` at dense below rank 25 [-]; top-3 = HO-2199@02-24 E-33, HO-2199@02-24 E-30, HO-2199@02-24 E-34; 0/3 of the top-3 carry ['E-17', 'HO-0304', '03-24']
+```
+
+Decision rule, applied mechanically to all 12:
+
+| Label | Rule |
+|---|---|
+| `PASS` | gold chunk in top-3 **and** the answer was quoted from it |
+| `R` | gold chunk **not** in top-3 — retrieval fetched bad context |
+| `G` | gold chunk **is** in top-3, but the answer step used a different chunk (or refused) |
+| `NIC` | no chunk in the index can answer it |
+
+## 4. The tally — every failure labelled, one line of evidence each
+
+| Label | Count | Questions |
 |---|---|---|
-| `baseline` | 25 | 0 |
-| `structure_aware` | 67 | 40 |
+| pass | **4** | G04, G06, G11, G12 |
+| R (retrieval fetched bad context) | **3** | G01, G05, G09 |
+| G (model misused good context) | **5** | G02, G03, G07, G08, G10 |
+| Not-In-Corpus | **0** | — |
+| Not-In-Corpus probe (uncounted) | 1 | P01 |
 
-Per-form chunk counts (every chunk carries source_file, form_number, policy_line, edition_date):
+**3 R · 5 G · 0 NIC in the scored set.** The tally is the argument: the majority of failures are G, and *no retrieval change on earth fixes a G*. Only the 3 R-failures were ever in scope for this week's change.
 
-| Form | `baseline` | `structure_aware` |
+**Why only 4 of 12 are a clean pass.** hit-rate@3 is 9/12 — retrieval put the right clause in the top-3 that often. But end-to-end only 4/12 produce the right answer, and the gap is entirely the answer step: 3 questions where it read only rank 1, and 2 where it refused with the gold chunk already in front of it. Those two numbers are the real finding of this week, and neither is a retrieval defect:
+
+| | Count | Meaning |
 |---|---|---|
-| DP-0431 | 4 | 11 |
-| HO-0304 | 7 | 16 |
-| HO-0455 | 3 | 14 |
-| HO-0612 | 4 | 12 |
-| HO-0788 | 4 | 5 |
-| HO-2199 | 3 | 9 |
+| Clean pass | 4/12 | right clause retrieved **and** quoted |
+| Retrieval found it, answer step lost it | 5/12 | `G-rank` + `G-refuse`, section 4.2 |
+| Retrieval never found it | 3/12 | `R`, section 4.1 — the only bucket this week's change could touch |
 
-## 1. The 8 questions and their known-correct form + clause
+### 4.1 The R-failures — retrieval fetched bad context
 
-Written from the endorsements before any search was run.
+- **G01** — *Does exclusion E-17 apply under form HO-0304 ed. 03-24?*  
+  `gold `structure_aware::HO-0304@03-24::010` at dense below rank 25 [-]; top-3 = HO-2199@02-24 E-33, HO-2199@02-24 E-30, HO-2199@02-24 E-34; 0/3 of the top-3 carry ['E-17', 'HO-0304', '03-24']`
+- **G05** — *What does E-22 exclude on endorsement HO-0455 ed. 01-24?*  
+  `gold `structure_aware::HO-0455@01-24::010` at dense below rank 25 [-]; top-3 = HO-0788@05-24 Clause 1, HO-2199@02-24 E-30, HO-2199@02-24 E-33; 0/3 of the top-3 carry ['E-22', 'HO-0455', '01-24']`
+- **G09** — *Asphalt shingle roof, 12 years old, hail loss. What percentage of replacement cost do we pay?*  
+  `gold `structure_aware::HO-0455@01-24::005` at dense rank 4 [dense#4(0.755)]; top-3 = HO-0455@01-24 Clause 1, HO-0455@01-24 Clause 2, HO-0455@01-24 Clause 2`
 
-| # | Question | Gold form | Gold clause | Marker | Answer marker | From a table row |
-|---|---|---|---|---|---|---|
-| Q1 | Does exclusion E-17 apply to water damage from a burst supply line under HO-0304? | HO-0304 | Clause 3 | `E-17` | `burst supply line` | yes |
-| Q2 | The dwelling was left vacant and the pipes froze. Is that loss excluded under HO-0304? | HO-0304 | Clause 3 | `E-18` | `maintain heat` | yes |
-| Q3 | Is granule loss on a shingle roof covered, or is it treated as cosmetic damage? | HO-0455 | Clause 3 | `E-21` | `water-shedding` | yes |
-| Q4 | Can the insured run a small home office and keep coverage under the home business exclusion? | HO-2199 | Clause 2 | `E-33` | `$10,000` | yes |
-| Q5 | What percentage of replacement cost is paid for a 12-year-old asphalt shingle roof? | HO-0455 | Clause 2 | `60%` | `11 to 15 years` | yes |
-| Q6 | What is the water damage deductible per occurrence under the limited water damage endorsement? | HO-0304 | Clause 1 | `$2,500` | `Water Damage Deductible` | yes |
-| Q7 | How much ordinance or law coverage does the increased-amount endorsement provide? | HO-0612 | Clause 1 | `25%` | `Coverage A` | no |
-| Q8 | How is 'sudden and accidental' defined for the purposes of these endorsements? | HO-0788 | Clause 2 | `unexpected and unintended` | `identifiable point in time` | no |
+### 4.2 The G-failures — good context was there and the answer step still missed
 
-**Q1 known answer** — No. E-17 excludes seepage lasting 14 days or more, but carries an express exception for a sudden and accidental discharge including a burst supply line, provided the loss is reported within 30 days.
+All 5 are G by the task's definition: the gold chunk was sitting in the top-3 and the answer was still wrong. But they are **two different defects**, and lumping them would hide the more serious one, so the tally splits them:
 
-**Q2 known answer** — Excluded under E-18, unless the insured used reasonable care to maintain heat, or shut off the water supply and drained the system.
-
-**Q3 known answer** — Excluded under E-21 as cosmetic damage that does not compromise the water-shedding function, unless the Cosmetic Damage Buy-Back is shown in the Declarations.
-
-**Q4 known answer** — Yes. E-33 excludes business losses but excepts an incidental office occupancy with no employees and no customer visits where annual gross receipts do not exceed $10,000.
-
-**Q5 known answer** — 60% - the 11 to 15 year band of the HO-0455 Payment Schedule.
-
-**Q6 known answer** — $2,500 per occurrence, reduced to $1,000 where a licensed plumber's inspection report dated within 12 months of the loss is produced.
-
-**Q7 known answer** — 25% of the Coverage A limit, up from 10% in the base wording, as additional insurance.
-
-**Q8 known answer** — An event both unexpected and unintended from the insured's standpoint that begins at an identifiable point in time; a slow weep or drip is not sudden and accidental even if it later worsens abruptly.
-
-## 2. Hit-in-top-5 — two strategies, same 8 questions
-
-| Chunking strategy | Hit-in-top-5 | Hit-at-rank-1 | MRR |
+| Sub-cause | Count | Questions | What actually happened |
 |---|---|---|---|
-| `baseline` | **7/8** | 4/8 | 0.656 |
-| `structure_aware` | **8/8** | 6/8 | 0.854 |
+| `G-rank` | **3** | G02, G03, G07 | gold was in the top-3 but **below rank 1**, and the answer step reads **only rank 1** |
+| `G-refuse` | **2** | G08, G10 | the answer step **refused outright** although the gold chunk was right there |
 
-Headline: `baseline` **7/8**, `structure_aware` **8/8**.
+**3 × G-rank — the answer step only ever reads rank 1.**
 
-Hit-at-rank-1 and MRR are reported alongside because top-5 over a 25-chunk index is a soft test — 5 of 25 is a fifth of the whole corpus. Rank-1 is the number that reflects what a user actually reads.
+- **G02** — *HO-0304 ed. 03-24, E-18: insured left the house vacant over winter and a pipe froze. Excluded if they kept the heat on?*  
+  `gold `structure_aware::HO-0304@03-24::011` IS in the top-3 at rank 3, but the answer step reads ONLY rank 1 and quoted `structure_aware::HO-0304@09-23::011` (HO-0304@09-23 E-18)`
+- **G03** — *What is the seepage trigger period for E-17 on the 09-23 edition of HO-0304?*  
+  `gold `structure_aware::HO-0304@09-23::010` IS in the top-3 at rank 3, but the answer step reads ONLY rank 1 and quoted `structure_aware::HO-0304@03-24::010` (HO-0304@03-24 E-17)`
+- **G07** — *DP-0431 ed. 04-24 E-17 - is there any sudden and accidental exception on the dwelling fire form?*  
+  `gold `structure_aware::DP-0431@04-24::007` IS in the top-3 at rank 3, but the answer step reads ONLY rank 1 and quoted `structure_aware::DP-0431@04-24::008` (DP-0431@04-24 E-21)`
 
-Per-question record (rank at which the correct chunk was found, or MISS):
+G02 is the clearest. The gold E-18 row **is** at rank 3 — and the two rows above it are the *same E-18 row from the 09-23 and 01-25 editions*, scoring 0.8086 against the gold's 0.8086, identical to four decimals. Retrieval did its job at top-3. `generator.py` then quotes `hits[0]` and cites the wrong edition of the form. On a real claim that is the wrong deductible and the wrong reporting window, delivered with a citation that looks correct. Reranking *within* the top-3 is the fix; a new embedding model is not, because three byte-identical rows cannot be separated by any bi-encoder.
 
-| # | Gold | `baseline` | `structure_aware` |
+**2 × G-refuse — the Week 3 refusal gate misfiring on real adjuster language.** This is the serious one, and it was invisible until the golden set was written from how adjusters actually talk.
+
+- **G08** — *Insured says hail knocked granules off the shingles but the roof is not leaking. Covered, or cosmetic?*  
+  `gold `structure_aware::HO-0455@01-24::009` IS in the top-3 at rank 2, but the answer step REFUSED (gate=term_coverage: Only 50% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: says, knocked, granules, shingles, leaking)`  
+  term coverage **50%** vs floor 55%; terms counted as absent: `says`, `knocked`, `granules`, `shingles`, `leaking`
+- **G10** — *Policyholder runs a bookkeeping business from a spare bedroom, no staff, no clients on site, about $8k a year. Does the business exclusion knock out the claim?*  
+  `gold `structure_aware::HO-2199@02-24::005` IS in the top-3 at rank 1, but the answer step REFUSED (gate=term_coverage: Only 50% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: policyholder, bookkeeping, spare, bedroom, staff, clients, knock)`  
+  term coverage **50%** vs floor 55%; terms counted as absent: `policyholder`, `bookkeeping`, `spare`, `bedroom`, `staff`, `clients`, `knock`
+
+Read G10 carefully, because it is the worst result in the whole run: **the gold chunk is at rank 1** and the assistant still answers *"I could not find this in the indexed endorsements"*. Retrieval was perfect. The Week 3 coverage gate rejected the question before ranking was ever consulted, because words like `bookkeeping`, `spare`, `bedroom` and `clients` do not appear in policy wording — which is precisely how an adjuster describes a claim. The gate was tuned in Week 3 against 11 questions written *from the endorsements*, in the endorsements' own vocabulary, and it measured 62% worst-in-corpus on those. Against real adjuster phrasing it drops to 50% and refuses. The Week 3 report called 55% "a defensible gate at this scale, not a universal constant" — this is that bill arriving.
+
+Neither sub-cause is reachable by a retrieval change. G-rank needs the answer step to read the whole top-3 instead of `hits[0]`; G-refuse needs the gate re-measured against adjuster vocabulary, or moved off raw term overlap entirely. Both are named in section 9 as the next changes, and neither was made this week — this week's one variable was retrieval.
+
+### 4.3 Not-In-Corpus
+
+- **P01** — *What does E-17 say on HO-0304 ed. 06-22?*  
+  `no chunk_id is known to be correct; 0 of 99 indexed chunks carry all of ['E-17', 'HO-0304', '06-22']; top-3 = HO-2199@02-24 E-30, HO-0612@06-24 E-43, HO-2199@02-24 E-33`  
+  Not in the drop: the pack holds ed. 09-23, 03-24 and 01-25 only. Not counted in hit-rate@3; used to demonstrate the Not-In-Corpus label.
+
+## 5. The one change, and why the tally chose it
+
+**The change: `RETRIEVAL_MODE = "dense"` → `"hybrid"` — dense top-25 + BM25 top-25, fused with Reciprocal Rank Fusion, k=60. Nothing else moved.** Same chunker, same embedding model, same index, same 12 questions, same top-3. No reranker was added in the same run; there is exactly one variable between the two columns.
+
+The tally picked it, and the inspection view picked it over the reranker on evidence. Of the 3 R-failures, two — **G01** and **G05** — have their gold chunk at dense rank **33/99** and **27/99** respectively, measured by brute force over the whole index. A cross-encoder rerank over the top 25 can only reorder the 25 candidates dense already fetched; it cannot reach rank 33. **A reranker was structurally incapable of fixing 2 of the 3 R-failures before it ran.** Both of those questions are exact-token lookups (`E-17`+`HO-0304`+`03-24`; `E-22`+`HO-0455`), which is precisely what a lexical retriever is for. So: BM25 + RRF, and RRF fuses **ranks** — a cosine of 0.69 and a BM25 score of 6.17 are not on the same scale and adding them would be meaningless.
+
+Also considered and rejected: swapping the embedding model, as the team lead suggested. 5 of the 8 failures are G — the right chunk was already in the top-3 — so a new bi-encoder changes nothing about them, and it would have cost a re-index plus the whole budget to prove it.
+
+## 6. Before → after: hit-rate@3 and p50 latency
+
+| | Before (`dense`) | After (`hybrid`: BM25 + RRF k=60) | Δ |
 |---|---|---|---|
-| Q1 | HO-0304 Clause 3 | hit @ rank 2 | hit @ rank 1 |
-| Q2 | HO-0304 Clause 3 | **MISS** | hit @ rank 1 |
-| Q3 | HO-0455 Clause 3 | hit @ rank 1 | hit @ rank 1 |
-| Q4 | HO-2199 Clause 2 | hit @ rank 4 | hit @ rank 1 |
-| Q5 | HO-0455 Clause 2 | hit @ rank 1 | hit @ rank 3 |
-| Q6 | HO-0304 Clause 1 | hit @ rank 2 | hit @ rank 1 |
-| Q7 | HO-0612 Clause 1 | hit @ rank 1 | hit @ rank 1 |
-| Q8 | HO-0788 Clause 2 | hit @ rank 1 | hit @ rank 2 |
+| **hit-rate@3** | **9/12** (75%) | **8/12** (67%) | **-1** |
+| answer quoted from gold | 4/12 | 4/12 | +0 |
+| **p50 latency / query** | **67.9 ms** | **43.9 ms** | **-24.0 ms (-35%)** |
+| p95 latency / query | 262.8 ms | 61.5 ms | -201.2 ms |
+| R / G / NIC | 3 / 5 / 0 | 4 / 4 / 0 | — |
 
-### Search-only dump, all 8 questions, both strategies
+Latency is wall-clock per `search()` call including the query embedding, 7 reps × 12 questions = 84 samples per mode, after warm-up, same process, same machine.
 
-#### Q1 — Does exclusion E-17 apply to water damage from a burst supply line under HO-0304?
+**Read the latency row honestly: the measured p50 delta is -24.0 ms, and that is inside the noise floor of this measurement.** The p50→p95 spread within a single mode is 194.9 ms — 8× the 24.0 ms between the two modes — and repeated runs move the dense p50 by more than the gap itself (the pre-change freeze in section 2 recorded 24.2 ms for the same dense retriever). So I will not quote a percentage as if it were a real cost: **the added BM25 + RRF stage costs less than this measurement can resolve.** The mechanism agrees: BM25 over a 99-chunk index is one numpy matrix product over a slice of a 99×|vocab| matrix, while a single query embedding through the ONNX bi-encoder dominates both paths.
 
-Gold: **HO-0304 Clause 3** (needs `E-17` AND `burst supply line` in the same chunk)
+**So the price was never the problem.** This is not a 'not worth the latency' verdict — the change is effectively free and *still* not worth shipping, because it did not move the number it was chosen to move. Cheap and useless is still useless. The one caveat I would put in front of the team lead: at 99 chunks BM25 is free, but its cost grows with corpus size while the embedding call does not, so this measurement does not license the claim that fusion is free across a full wording library.
 
-`baseline` — HIT at rank 2
+## 7. Per-question: fixed / unfixed / still-broken
 
-```
-1. score=0.7781  DP-0431 (DP-3, ed.04-24)  Clause 3  `baseline::DP-0431::002`
-   humidity, moisture, or condensation, that occurs over a period of 7 days or more | All covered property | No exception. This exclusion applies whether...
-2. score=0.7764  HO-0304 (HO-3, ed.03-24)  Clause 3  `baseline::HO-0304::003`
-   ws or is discharged from a sump, sump pump, or related equipment | All covered property | Does not apply where the Sump Overflow Buy-Back is shown in ...
-3. score=0.7537  HO-0304 (HO-3, ed.03-24)  Clause 1  `baseline::HO-0304::001`
-   Annual aggregate | $30,000 | ## Clause 2 — Coverage Grant We will pay for direct physical loss to covered property caused by the sudden and accidental...
-4. score=0.7535  DP-0431 (DP-3, ed.04-24)  Header  `baseline::DP-0431::000`
-   # DP-0431 (ed. 04-24) — WATER DAMAGE AND SEEPAGE EXCLUSION Policy Line: DP-3 Dwelling Fire | Edition Date: 04-24 | Effective: April 15, 2024 This endo...
-5. score=0.7499  HO-0304 (HO-3, ed.03-24)  Clause 3  `baseline::HO-0304::004`
-   e, while the dwelling is vacant, unoccupied, or under construction | Building and contents | Does not apply if the insured used reasonable care to mai...
-```
+| # | Baseline label | Baseline rank | After rank | After label | Verdict |
+|---|---|---|---|---|---|
+| G01 | `R` | >25 | 17 | `R` | **still broken** |
+| G02 | `G` | 3 | 2 | `G` | unchanged (still a hit) |
+| G03 | `G` | 3 | 2 | `G` | unchanged (still a hit) |
+| G04 | `PASS` | 1 | 1 | `PASS` | unchanged (still a hit) |
+| G05 | `R` | >25 | 4 | `R` | **still broken** |
+| G06 | `PASS` | 1 | 1 | `PASS` | unchanged (still a hit) |
+| G07 | `G` | 3 | 1 | `PASS` | still a hit, label G→PASS |
+| G08 | `G` | 2 | 2 | `G` | unchanged (still a hit) |
+| G09 | `R` | 4 | 5 | `R` | **still broken** |
+| G10 | `G` | 1 | 1 | `G` | unchanged (still a hit) |
+| G11 | `PASS` | 1 | 4 | `R` | **REGRESSED** |
+| G12 | `PASS` | 1 | 1 | `PASS` | unchanged (still a hit) |
 
-`structure_aware` — HIT at rank 1
+### 7.1 Which R-failures the change fixed, and which it did not touch
 
-```
-1. score=0.8189  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::010`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-2. score=0.8007  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::012`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-3. score=0.7994  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::009`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-4. score=0.7927  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::007`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-5. score=0.7912  HO-0304 (HO-3, ed.03-24)  Clause 2  `structure_aware::HO-0304::005`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 2 — Coverage Grant We will pay for direct physical ...
-```
+Named per question, as required:
 
-#### Q2 — The dwelling was left vacant and the pipes froze. Is that loss excluded under HO-0304?
+- **G01** — *Does exclusion E-17 apply under form HO-0304 ed. 03-24?*  
+  gold rank not in top-25 → 17. **NOT FIXED.**
+- **G05** — *What does E-22 exclude on endorsement HO-0455 ed. 01-24?*  
+  gold rank not in top-25 → 4. **NOT FIXED.**
+- **G09** — *Asphalt shingle roof, 12 years old, hail loss. What percentage of replacement cost do we pay?*  
+  gold rank 4 → 5. **NOT FIXED.**
 
-Gold: **HO-0304 Clause 3** (needs `E-18` AND `maintain heat` in the same chunk)
+**What the change did do, even though hit-rate@3 did not move up.** On G01 the gold E-17 row went from *invisible* — nowhere in dense's top-25, brute-force rank 33/99 — to **rank 5 on the BM25 list**. BM25 found the chunk dense could not see. RRF then failed to carry it into the top-3, and the inspection view says exactly why: the chunk that beats it on BM25 is the **E-19 row**, which merely *cites* E-17 ("where such condition results from a cause of loss excluded under E-15 or E-17"). Both rows contain `e-17` exactly once; the E-19 row is 73 tokens against the gold row's 98, and BM25's length normalisation (b=0.75, avgdl=62.6) rewards the shorter one. The retrieval defect is real and lexical, and BM25 addressed it — but a bag-of-words cannot tell *stating a rule* from *cross-referencing it*.
 
-`baseline` — MISS
+**And the regressions are the same mechanism in reverse.** G11 asks for a definition in prose and had the gold at dense rank 1; fusion pushed it to rank 4 behind chunks that score well lexically on `sudden`/`accidental`/`seepage` without being the definition. On a corpus where every chunk of a form carries that form's number and edition in its provenance header, form and edition tokens have almost no discriminative power *within* a document — `ho-0304` occurs in 48 of 99 chunks — so BM25's vote on an edition-scoped question is much weaker than it looks.
 
-```
-1. score=0.7424  HO-0304 (HO-3, ed.03-24)  Clause 3  `baseline::HO-0304::004`
-   e, while the dwelling is vacant, unoccupied, or under construction | Building and contents | Does not apply if the insured used reasonable care to mai...
-2. score=0.7286  HO-0304 (HO-3, ed.03-24)  Clause 3  `baseline::HO-0304::003`
-   ws or is discharged from a sump, sump pump, or related equipment | All covered property | Does not apply where the Sump Overflow Buy-Back is shown in ...
-3. score=0.7127  HO-0304 (HO-3, ed.03-24)  Clause 1  `baseline::HO-0304::001`
-   Annual aggregate | $30,000 | ## Clause 2 — Coverage Grant We will pay for direct physical loss to covered property caused by the sudden and accidental...
-4. score=0.6962  DP-0431 (DP-3, ed.04-24)  Clause 3  `baseline::DP-0431::002`
-   humidity, moisture, or condensation, that occurs over a period of 7 days or more | All covered property | No exception. This exclusion applies whether...
-5. score=0.6954  HO-0304 (HO-3, ed.03-24)  Header  `baseline::HO-0304::000`
-   # HO-0304 (ed. 03-24) — WATER DAMAGE — LIMITED COVERAGE ENDORSEMENT Policy Line: HO-3 Homeowners | Edition Date: 03-24 | Effective: March 1, 2024 This...
-```
+**Robustness check, reported because it cuts against the headline.** Re-running the same fusion with the Robertson idf variant `log((N-df+0.5)/(df+0.5))` plus rank_bm25's epsilon floor, instead of the Lucene `ln(1+·)` idf, gives hit-rate@3 = **9/12** — level with the baseline rather than below it. So the true reading is not 'BM25+RRF costs you a question', it is **'BM25+RRF is worth between −1 and 0 questions on this set, i.e. it does not buy back hit-rate@3, and which side of zero it lands on is decided by an idf formula rather than by anything about the corpus.'** `src/bm25.py` was cross-checked against an independently written Lucene-idf implementation and agrees to 5e-05.
 
-`structure_aware` — HIT at rank 1
+## 8. Bonus — MMR over the fused candidate list
 
-```
-1. score=0.8142  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::011`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-2. score=0.7497  HO-0304 (HO-3, ed.03-24)  Clause 2  `structure_aware::HO-0304::005`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 2 — Coverage Grant We will pay for direct physical ...
-3. score=0.7442  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::010`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-4. score=0.7375  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::008`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-5. score=0.7276  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::009`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-```
+The bonus scenario is live in this corpus: for G01 the fused top-3 is the **same E-19 exclusion row repeated across the 09-23, 03-24 and 01-25 editions**. MMR should be the cure for exactly that. Tuned once, over the fused candidates, λ=1.0 being plain RRF order:
 
-#### Q3 — Is granule loss on a shingle roof covered, or is it treated as cosmetic damage?
+| λ | hit-rate@3 | mean pairwise cosine within top-3 (lower = more diverse) | mean distinct row texts in top-3 | mean distinct form editions in top-3 |
+|---|---|---|---|---|
+| 1.0 | **8/12** | 0.899 | 2.67/3 | 1.92/3 |
+| 0.9 | **8/12** | 0.899 | 2.67/3 | 1.92/3 |
+| 0.8 | **9/12** | 0.886 | 2.75/3 | 1.83/3 |
+| 0.7 | **9/12** | 0.880 | 2.75/3 | 1.75/3 |
+| 0.5 | **8/12** | 0.836 | 2.92/3 | 1.83/3 |
+| 0.3 | **7/12** | 0.773 | 3.00/3 | 2.25/3 |
 
-Gold: **HO-0455 Clause 3** (needs `E-21` AND `water-shedding` in the same chunk)
+**What it did.** Diversity moves as advertised: mean pairwise cosine within the top-3 falls from 0.899 at λ=1.0 to 0.773 at λ=0.3, and distinct row texts rise from 2.67/3 to 3.00/3. Hit-rate@3 is not monotonic in λ: 8/12 at λ=1.0, up to **9/12 at λ=0.8**, back down to 7/12 at λ=0.3 where the diversity penalty starts evicting correct chunks outright.
 
-`baseline` — HIT at rank 1
+That peak deserves a sentence rather than a victory lap. **MMR at λ=0.8 recovers hit-rate@3 to 9/12 — exactly level with the dense baseline, not above it.** A mild diversity penalty undoes some of the damage fusion did by breaking up the blocks of near-identical rows that crowded the top-3; it does not find anything the baseline could not. And λ was picked by reading this table, on these 12 questions, which is tuning on the test set: a 1-question swing on n=12 is one question, not a result. I am reporting it, not banking it.
 
-```
-1. score=0.7354  HO-0455 (HO-3, ed.01-24)  Clause 2  `baseline::HO-0455::001`
-   11 to 15 years | 60% | 85% | | 16 to 20 years | 40% | 70% | | 21 to 25 years | 25% | 55% | | Over 25 years | 15% | 40% | Roof age is measured from the...
-2. score=0.7166  HO-0455 (HO-3, ed.01-24)  Header  `baseline::HO-0455::000`
-   # HO-0455 (ed. 01-24) — ROOF SURFACING — ACTUAL CASH VALUE LOSS SETTLEMENT Policy Line: HO-3 Homeowners | Edition Date: 01-24 | Effective: January 15,...
-3. score=0.7044  HO-0455 (HO-3, ed.01-24)  Clause 3  `baseline::HO-0455::002`
-   | E-23 | Loss to roof surfacing more than 30 years old at the date of loss | Roof surfacing only | None. Such roofs are ineligible and coverage is del...
-4. score=0.6350  DP-0431 (DP-3, ed.04-24)  Clause 2  `baseline::DP-0431::001`
-   pliance, is deleted in its entirety unless the Water Damage Buy-Back shown in the Declarations has been purchased. | Item | Amount | |---|---| | Water...
-5. score=0.6199  HO-0304 (HO-3, ed.03-24)  Clause 1  `baseline::HO-0304::001`
-   Annual aggregate | $30,000 | ## Clause 2 — Coverage Grant We will pay for direct physical loss to covered property caused by the sudden and accidental...
-```
+**Would I ship it? No — and the bonus question names the reason precisely.** In this corpus the three near-duplicate candidates are not redundancy, they are *three different legal answers wearing the same words*: E-17 triggers at 21 days on ed. 09-23, 14 days on ed. 03-24, and 14 days plus an installed shut-off device on ed. 01-25. MMR's similarity penalty is computed on the same bi-encoder embedding that already cannot tell the editions apart, so it sees three interchangeable duplicates and drops two — and it has no way to know it kept the wrong one. On an edition-scoped question, pushing the correct edition out of the top-3 in the name of variety is not a diversity trade-off, it is a wrong coverage answer with better-looking search results. The right fix for near-duplicate editions is a metadata filter on `edition_date` (already supported, and it goes to the DB as a `where` clause), not a diversity penalty.
 
-`structure_aware` — HIT at rank 1
+## 9. Shipping decision
+
+**Do not ship the hybrid retriever. Baseline 9/12 → 8/12 on the same 12 questions: -1.** The latency price is real but small (67.9 → 43.9 ms p50, -24.0 ms); it is not what decides this. A change that costs -24.0 ms and returns between −1 and 0 questions does not go to an adjuster's desk, and "it fixed the E-17 query in principle" is not a number.
+
+**What I would do with the budget instead, in tally order:**
+
+1. **The 5 G-failures are the largest single bucket and no retrieval change touches them.** Answer-from-gold is 4/12 against hit-rate@3 of 9/12 — the retriever is already putting the right chunk in front of the answer step twice as often as the answer step uses it. That is where the wrong coverage answers are actually coming from.
+2. **Edition disambiguation belongs in metadata, not in the ranker.** Every edition-scoped failure here (G01, G02, G03, G04) is a question whose answer depends on a field we already index and can filter on exactly. Parsing `ed. 03-24` out of the question and filtering `edition_date` is a smaller change than fusion and addresses the failures fusion could not.
+3. **Only then revisit lexical retrieval**, and if so, with the exclusion code as a filterable field (`exclusion_codes` is already stamped on every chunk) rather than as bag-of-words evidence — which is what would have stopped the E-19 row from outranking the E-17 row.
+
+The team lead's proposal — swap the embedding model — is the one option the data rules out first: 5 of 8 failures already had the correct chunk in the top-3.
+
+## Appendix — full inspection view, all 12 questions, both runs
+
+### G01 — Does exclusion E-17 apply under form HO-0304 ed. 03-24?
+
+Gold: `structure_aware::HO-0304@03-24::010` · known answer: E-17 (ed. 03-24) excludes seepage over 14 days or more, whether or not known to the insured; it does not apply to a sudden and accidental discharge as defined in HO-0788, including a burst supply line, provided the loss is reported within 30 days.
+
+**Verdict: **still broken****
+
+`dense — BEFORE`
 
 ```
-1. score=0.7504  HO-0455 (HO-3, ed.01-24)  Clause 3  `structure_aware::HO-0455::009`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of lo...
-2. score=0.7120  HO-0455 (HO-3, ed.01-24)  Clause 1  `structure_aware::HO-0455::001`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 1 — Loss Settlement Basis Loss to roof surfa...
-3. score=0.6895  HO-0455 (HO-3, ed.01-24)  Clause 4  `structure_aware::HO-0455::013`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 4 — Conditions 4.1 Interior water damage res...
-4. score=0.6765  HO-0455 (HO-3, ed.01-24)  Clause 3  `structure_aware::HO-0455::012`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of lo...
-5. score=0.6746  HO-0455 (HO-3, ed.01-24)  Clause 2  `structure_aware::HO-0455::007`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 2 — Payment Schedule | Roof age at date of l...
+Q: Does exclusion E-17 apply under form HO-0304 ed. 03-24?
+mode=dense  gold=structure_aware::HO-0304@03-24::010  gold_rank=None  hit@3=False  answer_ok=False  label=R (R)
+exact tokens in question: ['E-17', 'HO-0304', '03-24']  (top-3 chunks carrying all of them: 0/3)
+candidates (final order):
+   1. dense#1(0.779)  structure_aware::HO-2199@02-24::005
+      HO-2199 ed.02-24 Clause 2: | E-33 | Any loss arising out of a business conducted on the residence premises, includ...
+   2. dense#2(0.766)  structure_aware::HO-2199@02-24::002
+      HO-2199 ed.02-24 Clause 2: | E-30 | Any loss to covered property occurring during a home-sharing occupancy | Build...
+   3. dense#3(0.761)  structure_aware::HO-2199@02-24::006
+      HO-2199 ed.02-24 Clause 2: | E-34 | Loss to property held for rental to others, or to furnishings provided for the...
+   4. dense#4(0.754)  structure_aware::HO-2199@02-24::004
+      HO-2199 ed.02-24 Clause 2: | E-32 | Bodily injury or property damage arising out of a home-sharing occupancy | Sec...
+   5. dense#5(0.746)  structure_aware::HO-2199@02-24::003
+      HO-2199 ed.02-24 Clause 2: | E-31 | Theft or mysterious disappearance of personal property during a home-sharing o...
+  gold structure_aware::HO-0304@03-24::010 not within the 25 candidates
+answer quoted from: structure_aware::HO-2199@02-24::005
+evidence: gold `structure_aware::HO-0304@03-24::010` at dense below rank 25 [-]; top-3 = HO-2199@02-24 E-33, HO-2199@02-24 E-30, HO-2199@02-24 E-34; 0/3 of the top-3 carry ['E-17', 'HO-0304', '03-24']
 ```
 
-#### Q4 — Can the insured run a small home office and keep coverage under the home business exclusion?
-
-Gold: **HO-2199 Clause 2** (needs `E-33` AND `$10,000` in the same chunk)
-
-`baseline` — HIT at rank 4
+`hybrid — AFTER`
 
 ```
-1. score=0.7281  HO-2199 (HO-3, ed.02-24)  Header  `baseline::HO-2199::000`
-   # HO-2199 (ed. 02-24) — HOME-SHARING AND HOME BUSINESS EXCLUSION Policy Line: HO-3 Homeowners | Edition Date: 02-24 | Effective: February 1, 2024 This...
-2. score=0.6981  HO-2199 (HO-3, ed.02-24)  Clause 2  `baseline::HO-2199::002`
-   visits, where annual gross receipts do not exceed $10,000 | | E-34 | Loss to property held for rental to others, or to furnishings provided for the us...
-3. score=0.6733  HO-0304 (HO-3, ed.03-24)  Clause 3  `baseline::HO-0304::004`
-   e, while the dwelling is vacant, unoccupied, or under construction | Building and contents | Does not apply if the insured used reasonable care to mai...
-4. score=0.6680  HO-2199 (HO-3, ed.02-24)  Clause 2  `baseline::HO-2199::001`
-   a home-sharing occupancy | Building and contents | Does not apply to loss by fire, lightning, or explosion | | E-31 | Theft or mysterious disappearanc...
-5. score=0.6674  HO-0304 (HO-3, ed.03-24)  Clause 1  `baseline::HO-0304::001`
-   Annual aggregate | $30,000 | ## Clause 2 — Coverage Grant We will pay for direct physical loss to covered property caused by the sudden and accidental...
+Q: Does exclusion E-17 apply under form HO-0304 ed. 03-24?
+mode=hybrid  gold=structure_aware::HO-0304@03-24::010  gold_rank=17  hit@3=False  answer_ok=False  label=R (R)
+exact tokens in question: ['E-17', 'HO-0304', '03-24']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#6(0.739)  bm25#1(8.861)  rrf#1(0.032)  structure_aware::HO-0304@03-24::012
+      HO-0304 ed.03-24 Clause 3: | E-19 | Mould, fungus, wet rot, dry rot, or bacteria, where such condition results fro...
+   2. dense#8(0.736)  bm25#2(7.291)  rrf#2(0.031)  structure_aware::HO-0304@01-25::012
+      HO-0304 ed.01-25 Clause 3: | E-19 | Mould, fungus, wet rot, dry rot, or bacteria, where such condition results fro...
+   3. dense#7(0.737)  bm25#3(7.291)  rrf#3(0.031)  structure_aware::HO-0304@09-23::012
+      HO-0304 ed.09-23 Clause 3: | E-19 | Mould, fungus, wet rot, dry rot, or bacteria, where such condition results fro...
+   4. dense#2(0.766)  bm25#10(4.955)  rrf#4(0.030)  structure_aware::HO-2199@02-24::002
+      HO-2199 ed.02-24 Clause 2: | E-30 | Any loss to covered property occurring during a home-sharing occupancy | Build...
+   5. dense#4(0.754)  bm25#11(4.799)  rrf#5(0.030)  structure_aware::HO-2199@02-24::004
+      HO-2199 ed.02-24 Clause 2: | E-32 | Bodily injury or property damage arising out of a home-sharing occupancy | Sec...
+  ...
+  17. dense#-  bm25#5(6.174)  rrf#17(0.015)  structure_aware::HO-0304@03-24::010  <-- GOLD
+answer quoted from: structure_aware::HO-0304@03-24::012
+evidence: gold `structure_aware::HO-0304@03-24::010` at hybrid rank 17 [bm25#5(6.174), rrf#17(0.015)]; top-3 = HO-0304@03-24 E-19, HO-0304@01-25 E-19, HO-0304@09-23 E-19; 1/3 of the top-3 carry ['E-17', 'HO-0304', '03-24']
 ```
 
-`structure_aware` — HIT at rank 1
+### G02 — HO-0304 ed. 03-24, E-18: insured left the house vacant over winter and a pipe froze. Excluded if they kept the heat on?
+
+Gold: `structure_aware::HO-0304@03-24::011` · known answer: E-18 excludes freezing while vacant, but the exception applies if the insured used reasonable care to maintain heat, or shut off the water and drained the system - so with heat maintained it is not excluded.
+
+**Verdict: unchanged (still a hit)**
+
+`dense — BEFORE`
 
 ```
-1. score=0.7419  HO-2199 (HO-3, ed.02-24)  Clause 2  `structure_aware::HO-2199::005`
-   Form HO-2199 (ed. 02-24) — Home-Sharing and Home Business Exclusion — Policy Line HO-3 — Clause 2 — Exclusions | Code | Excluded cause of loss | Appli...
-2. score=0.7209  HO-2199 (HO-3, ed.02-24)  Clause 3  `structure_aware::HO-2199::007`
-   Form HO-2199 (ed. 02-24) — Home-Sharing and Home Business Exclusion — Policy Line HO-3 — Clause 3 — Notice Requirement 3.1 The insured must notify us ...
-3. score=0.7151  HO-2199 (HO-3, ed.02-24)  Header  `structure_aware::HO-2199::000`
-   Form HO-2199 (ed. 02-24) — Home-Sharing and Home Business Exclusion — Policy Line HO-3 — Header # HO-2199 (ed. 02-24) — HOME-SHARING AND HOME BUSINESS...
-4. score=0.7130  HO-2199 (HO-3, ed.02-24)  Clause 2  `structure_aware::HO-2199::002`
-   Form HO-2199 (ed. 02-24) — Home-Sharing and Home Business Exclusion — Policy Line HO-3 — Clause 2 — Exclusions | Code | Excluded cause of loss | Appli...
-5. score=0.7035  HO-2199 (HO-3, ed.02-24)  Clause 2  `structure_aware::HO-2199::004`
-   Form HO-2199 (ed. 02-24) — Home-Sharing and Home Business Exclusion — Policy Line HO-3 — Clause 2 — Exclusions | Code | Excluded cause of loss | Appli...
+Q: HO-0304 ed. 03-24, E-18: insured left the house vacant over winter and a pipe froze. Excluded if they kept the heat on?
+mode=dense  gold=structure_aware::HO-0304@03-24::011  gold_rank=3  hit@3=True  answer_ok=False  label=G (G-rank)
+exact tokens in question: ['E-18', 'HO-0304', '03-24']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.809)  structure_aware::HO-0304@09-23::011
+      HO-0304 ed.09-23 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+   2. dense#2(0.809)  structure_aware::HO-0304@01-25::011
+      HO-0304 ed.01-25 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+   3. dense#3(0.809)  structure_aware::HO-0304@03-24::011  <-- GOLD
+      HO-0304 ed.03-24 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+   4. dense#4(0.731)  structure_aware::HO-0304@01-25::005
+      HO-0304 ed.01-25 Clause 2: Coverage under this clause includes the reasonable cost to tear out and replace that pa...
+   5. dense#5(0.731)  structure_aware::HO-0304@03-24::005
+      HO-0304 ed.03-24 Clause 2: Coverage under this clause includes the reasonable cost to tear out and replace that pa...
+answer quoted from: structure_aware::HO-0304@09-23::011
+evidence: gold `structure_aware::HO-0304@03-24::011` IS in the top-3 at rank 3, but the answer step reads ONLY rank 1 and quoted `structure_aware::HO-0304@09-23::011` (HO-0304@09-23 E-18)
 ```
 
-#### Q5 — What percentage of replacement cost is paid for a 12-year-old asphalt shingle roof?
-
-Gold: **HO-0455 Clause 2** (needs `60%` AND `11 to 15 years` in the same chunk)
-
-`baseline` — HIT at rank 1
+`hybrid — AFTER`
 
 ```
-1. score=0.7280  HO-0455 (HO-3, ed.01-24)  Header  `baseline::HO-0455::000`
-   # HO-0455 (ed. 01-24) — ROOF SURFACING — ACTUAL CASH VALUE LOSS SETTLEMENT Policy Line: HO-3 Homeowners | Edition Date: 01-24 | Effective: January 15,...
-2. score=0.6844  HO-0455 (HO-3, ed.01-24)  Clause 2  `baseline::HO-0455::001`
-   11 to 15 years | 60% | 85% | | 16 to 20 years | 40% | 70% | | 21 to 25 years | 25% | 55% | | Over 25 years | 15% | 40% | Roof age is measured from the...
-3. score=0.6780  HO-0455 (HO-3, ed.01-24)  Clause 3  `baseline::HO-0455::002`
-   | E-23 | Loss to roof surfacing more than 30 years old at the date of loss | Roof surfacing only | None. Such roofs are ineligible and coverage is del...
-4. score=0.6145  HO-0304 (HO-3, ed.03-24)  Clause 1  `baseline::HO-0304::001`
-   Annual aggregate | $30,000 | ## Clause 2 — Coverage Grant We will pay for direct physical loss to covered property caused by the sudden and accidental...
-5. score=0.6126  HO-0612 (HO-5, ed.06-24)  Clause 1  `baseline::HO-0612::001`
-   onstruction cap | $25,000 | $75,000 | ## Clause 2 — Covered Costs 2.1 The increased amount in Clause 1 covers the increased cost to repair, rebuild, o...
+Q: HO-0304 ed. 03-24, E-18: insured left the house vacant over winter and a pipe froze. Excluded if they kept the heat on?
+mode=hybrid  gold=structure_aware::HO-0304@03-24::011  gold_rank=2  hit@3=True  answer_ok=False  label=G (G-rank)
+exact tokens in question: ['E-18', 'HO-0304', '03-24']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.809)  bm25#3(17.313)  rrf#1(0.032)  structure_aware::HO-0304@09-23::011
+      HO-0304 ed.09-23 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+   2. dense#3(0.809)  bm25#1(18.823)  rrf#2(0.032)  structure_aware::HO-0304@03-24::011  <-- GOLD
+      HO-0304 ed.03-24 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+   3. dense#2(0.809)  bm25#2(17.313)  rrf#3(0.032)  structure_aware::HO-0304@01-25::011
+      HO-0304 ed.01-25 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+   4. dense#8(0.715)  bm25#4(8.910)  rrf#4(0.030)  structure_aware::HO-0304@03-24::010
+      HO-0304 ed.03-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   5. dense#7(0.719)  bm25#7(7.449)  rrf#5(0.030)  structure_aware::HO-0304@01-25::010
+      HO-0304 ed.01-25 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+answer quoted from: structure_aware::HO-0304@09-23::011
+evidence: gold `structure_aware::HO-0304@03-24::011` IS in the top-3 at rank 2, but the answer step reads ONLY rank 1 and quoted `structure_aware::HO-0304@09-23::011` (HO-0304@09-23 E-18)
 ```
 
-`structure_aware` — HIT at rank 3
+### G03 — What is the seepage trigger period for E-17 on the 09-23 edition of HO-0304?
+
+Gold: `structure_aware::HO-0304@09-23::010` · known answer: 21 days or more on ed. 09-23 (versus 14 days on ed. 03-24 and ed. 01-25).
+
+**Verdict: unchanged (still a hit)**
+
+`dense — BEFORE`
 
 ```
-1. score=0.7174  HO-0455 (HO-3, ed.01-24)  Clause 2  `structure_aware::HO-0455::004`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 2 — Payment Schedule | Roof age at date of l...
-2. score=0.7172  HO-0455 (HO-3, ed.01-24)  Clause 2  `structure_aware::HO-0455::007`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 2 — Payment Schedule | Roof age at date of l...
-3. score=0.7156  HO-0455 (HO-3, ed.01-24)  Clause 2  `structure_aware::HO-0455::005`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 2 — Payment Schedule | Roof age at date of l...
-4. score=0.7121  HO-0455 (HO-3, ed.01-24)  Clause 2  `structure_aware::HO-0455::006`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 2 — Payment Schedule | Roof age at date of l...
-5. score=0.7097  HO-0455 (HO-3, ed.01-24)  Clause 2  `structure_aware::HO-0455::008`
-   Form HO-0455 (ed. 01-24) — Roof Surfacing - Actual Cash Value Loss Settlement — Policy Line HO-3 — Clause 2 — Payment Schedule | Roof age at date of l...
+Q: What is the seepage trigger period for E-17 on the 09-23 edition of HO-0304?
+mode=dense  gold=structure_aware::HO-0304@09-23::010  gold_rank=3  hit@3=True  answer_ok=False  label=G (G-rank)
+exact tokens in question: ['E-17', 'HO-0304', '09-23']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.733)  structure_aware::HO-0304@03-24::010
+      HO-0304 ed.03-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   2. dense#2(0.730)  structure_aware::HO-0304@01-25::010
+      HO-0304 ed.01-25 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   3. dense#3(0.718)  structure_aware::HO-0304@09-23::010  <-- GOLD
+      HO-0304 ed.09-23 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   4. dense#4(0.697)  structure_aware::HO-0612@06-24::010
+      HO-0612 ed.06-24 Clause 3: | E-43 | The cost to comply with an ordinance or law where the loss triggering enforcem...
+   5. dense#5(0.688)  structure_aware::HO-0304@03-24::004
+      HO-0304 ed.03-24 Clause 1: | Annual aggregate | $30,000 |
+answer quoted from: structure_aware::HO-0304@03-24::010
+evidence: gold `structure_aware::HO-0304@09-23::010` IS in the top-3 at rank 3, but the answer step reads ONLY rank 1 and quoted `structure_aware::HO-0304@03-24::010` (HO-0304@03-24 E-17)
 ```
 
-#### Q6 — What is the water damage deductible per occurrence under the limited water damage endorsement?
-
-Gold: **HO-0304 Clause 1** (needs `$2,500` AND `Water Damage Deductible` in the same chunk)
-
-`baseline` — HIT at rank 2
+`hybrid — AFTER`
 
 ```
-1. score=0.8313  DP-0431 (DP-3, ed.04-24)  Clause 2  `baseline::DP-0431::001`
-   pliance, is deleted in its entirety unless the Water Damage Buy-Back shown in the Declarations has been purchased. | Item | Amount | |---|---| | Water...
-2. score=0.8252  HO-0304 (HO-3, ed.03-24)  Header  `baseline::HO-0304::000`
-   # HO-0304 (ed. 03-24) — WATER DAMAGE — LIMITED COVERAGE ENDORSEMENT Policy Line: HO-3 Homeowners | Edition Date: 03-24 | Effective: March 1, 2024 This...
-3. score=0.8070  HO-0304 (HO-3, ed.03-24)  Clause 4  `baseline::HO-0304::006`
-   nsed plumber's inspection report dated within 12 months before the date of loss is produced, the Water Damage Deductible in Clause 1 is reduced to $1,...
-4. score=0.7671  HO-0304 (HO-3, ed.03-24)  Clause 4  `baseline::HO-0304::005`
-   ed must report any loss under this endorsement to us within 30 days of discovery. A loss reported more than 30 days after discovery may be denied in w...
-5. score=0.7540  DP-0431 (DP-3, ed.04-24)  Header  `baseline::DP-0431::000`
-   # DP-0431 (ed. 04-24) — WATER DAMAGE AND SEEPAGE EXCLUSION Policy Line: DP-3 Dwelling Fire | Edition Date: 04-24 | Effective: April 15, 2024 This endo...
+Q: What is the seepage trigger period for E-17 on the 09-23 edition of HO-0304?
+mode=hybrid  gold=structure_aware::HO-0304@09-23::010  gold_rank=2  hit@3=True  answer_ok=False  label=G (G-rank)
+exact tokens in question: ['E-17', 'HO-0304', '09-23']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.733)  bm25#4(8.886)  rrf#1(0.032)  structure_aware::HO-0304@03-24::010
+      HO-0304 ed.03-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   2. dense#3(0.718)  bm25#3(9.498)  rrf#2(0.032)  structure_aware::HO-0304@09-23::010  <-- GOLD
+      HO-0304 ed.09-23 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   3. dense#6(0.686)  bm25#1(11.863)  rrf#3(0.032)  structure_aware::HO-0304@09-23::000
+      HO-0304 ed.09-23 Header: This endorsement modifies insurance provided under the HOMEOWNERS POLICY WORDING. All o...
+   4. dense#2(0.730)  bm25#7(8.372)  rrf#4(0.031)  structure_aware::HO-0304@01-25::010
+      HO-0304 ed.01-25 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   5. dense#10(0.677)  bm25#5(8.722)  rrf#5(0.030)  structure_aware::HO-0304@01-25::000
+      HO-0304 ed.01-25 Header: This endorsement modifies insurance provided under the HOMEOWNERS POLICY WORDING. All o...
+answer quoted from: structure_aware::HO-0304@03-24::010
+evidence: gold `structure_aware::HO-0304@09-23::010` IS in the top-3 at rank 2, but the answer step reads ONLY rank 1 and quoted `structure_aware::HO-0304@03-24::010` (HO-0304@03-24 E-17)
 ```
 
-`structure_aware` — HIT at rank 1
+### G04 — Under HO-0304 ed. 01-25, does the E-17 burst supply line exception still apply if no shut-off device was installed?
+
+Gold: `structure_aware::HO-0304@01-25::010` · known answer: No. On ed. 01-25 the exception requires the loss to be reported within 14 days AND an approved automatic shut-off device installed and operational at the time of loss.
+
+**Verdict: unchanged (still a hit)**
+
+`dense — BEFORE`
 
 ```
-1. score=0.8564  HO-0304 (HO-3, ed.03-24)  Clause 1  `structure_aware::HO-0304::003`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 1 — Schedule and Applicability | Item | Amount | | ...
-2. score=0.8278  HO-0304 (HO-3, ed.03-24)  Clause 1  `structure_aware::HO-0304::002`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 1 — Schedule and Applicability | Item | Amount | | ...
-3. score=0.8104  HO-0304 (HO-3, ed.03-24)  Clause 4  `structure_aware::HO-0304::014`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 4 — Conditions 4.1 Reporting. The insured must repo...
-4. score=0.8000  HO-0304 (HO-3, ed.03-24)  Clause 1  `structure_aware::HO-0304::001`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 1 — Schedule and Applicability This endorsement app...
-5. score=0.7920  DP-0431 (DP-3, ed.04-24)  Clause 2  `structure_aware::DP-0431::004`
-   Form DP-0431 (ed. 04-24) — Dwelling Fire - Water Damage and Seepage Exclusion — Policy Line DP-3 — Clause 2 — Restriction of Coverage | Item | Amount ...
+Q: Under HO-0304 ed. 01-25, does the E-17 burst supply line exception still apply if no shut-off device was installed?
+mode=dense  gold=structure_aware::HO-0304@01-25::010  gold_rank=1  hit@3=True  answer_ok=True  label=PASS (PASS)
+exact tokens in question: ['E-17', 'HO-0304', '01-25']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.711)  structure_aware::HO-0304@01-25::010  <-- GOLD
+      HO-0304 ed.01-25 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   2. dense#2(0.700)  structure_aware::HO-0304@09-23::010
+      HO-0304 ed.09-23 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   3. dense#3(0.692)  structure_aware::HO-0304@03-24::010
+      HO-0304 ed.03-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   4. dense#4(0.671)  structure_aware::HO-0304@03-24::011
+      HO-0304 ed.03-24 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+   5. dense#5(0.670)  structure_aware::HO-0304@01-25::011
+      HO-0304 ed.01-25 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+answer quoted from: structure_aware::HO-0304@01-25::010
+evidence: gold at dense rank 1; quoted from it
 ```
 
-#### Q7 — How much ordinance or law coverage does the increased-amount endorsement provide?
-
-Gold: **HO-0612 Clause 1** (needs `25%` AND `Coverage A` in the same chunk)
-
-`baseline` — HIT at rank 1
+`hybrid — AFTER`
 
 ```
-1. score=0.8110  HO-0612 (HO-5, ed.06-24)  Header  `baseline::HO-0612::000`
-   # HO-0612 (ed. 06-24) — ORDINANCE OR LAW — INCREASED AMOUNT OF COVERAGE Policy Line: HO-5 Homeowners | Edition Date: 06-24 | Effective: June 1, 2024 T...
-2. score=0.7081  HO-0612 (HO-5, ed.06-24)  Clause 1  `baseline::HO-0612::001`
-   onstruction cap | $25,000 | $75,000 | ## Clause 2 — Covered Costs 2.1 The increased amount in Clause 1 covers the increased cost to repair, rebuild, o...
-3. score=0.6999  HO-0304 (HO-3, ed.03-24)  Header  `baseline::HO-0304::000`
-   # HO-0304 (ed. 03-24) — WATER DAMAGE — LIMITED COVERAGE ENDORSEMENT Policy Line: HO-3 Homeowners | Edition Date: 03-24 | Effective: March 1, 2024 This...
-4. score=0.6776  HO-0612 (HO-5, ed.06-24)  Clause 3  `baseline::HO-0612::003`
-   d property | None | | E-43 | The cost to comply with an ordinance or law where the loss triggering enforcement is not itself covered under Coverage A ...
-5. score=0.6711  HO-0788 (HO-3, ed.05-24)  Header  `baseline::HO-0788::000`
-   # HO-0788 (ed. 05-24) — DEFINITIONS AMENDMENT ENDORSEMENT Policy Line: HO-3 Homeowners | Edition Date: 05-24 | Effective: May 1, 2024 This endorsement...
+Q: Under HO-0304 ed. 01-25, does the E-17 burst supply line exception still apply if no shut-off device was installed?
+mode=hybrid  gold=structure_aware::HO-0304@01-25::010  gold_rank=1  hit@3=True  answer_ok=True  label=PASS (PASS)
+exact tokens in question: ['E-17', 'HO-0304', '01-25']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.711)  bm25#1(20.474)  rrf#1(0.033)  structure_aware::HO-0304@01-25::010  <-- GOLD
+      HO-0304 ed.01-25 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   2. dense#3(0.692)  bm25#5(12.293)  rrf#2(0.031)  structure_aware::HO-0304@03-24::010
+      HO-0304 ed.03-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   3. dense#2(0.700)  bm25#7(11.815)  rrf#3(0.031)  structure_aware::HO-0304@09-23::010
+      HO-0304 ed.09-23 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   4. dense#5(0.670)  bm25#6(12.090)  rrf#4(0.031)  structure_aware::HO-0304@01-25::011
+      HO-0304 ed.01-25 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+   5. dense#4(0.671)  bm25#8(10.477)  rrf#5(0.030)  structure_aware::HO-0304@03-24::011
+      HO-0304 ed.03-24 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+answer quoted from: structure_aware::HO-0304@01-25::010
+evidence: gold at hybrid rank 1; quoted from it
 ```
 
-`structure_aware` — HIT at rank 1
+### G05 — What does E-22 exclude on endorsement HO-0455 ed. 01-24?
+
+Gold: `structure_aware::HO-0455@01-24::010` · known answer: Loss to roof surfacing caused by wear, tear, deterioration, or manufacturing defect; no exception. (DP-0431 also has an E-22 and it says something different - supply line older than 10 years.)
+
+**Verdict: **still broken****
+
+`dense — BEFORE`
 
 ```
-1. score=0.7968  HO-0612 (HO-5, ed.06-24)  Clause 1  `structure_aware::HO-0612::001`
-   Form HO-0612 (ed. 06-24) — Ordinance or Law - Increased Amount of Coverage — Policy Line HO-5 — Clause 1 — Increased Limit The Ordinance or Law limit ...
-2. score=0.7625  HO-0612 (HO-5, ed.06-24)  Clause 1  `structure_aware::HO-0612::005`
-   Form HO-0612 (ed. 06-24) — Ordinance or Law - Increased Amount of Coverage — Policy Line HO-5 — Clause 1 — Increased Limit | Item | Base wording | As ...
-3. score=0.7592  HO-0612 (HO-5, ed.06-24)  Header  `structure_aware::HO-0612::000`
-   Form HO-0612 (ed. 06-24) — Ordinance or Law - Increased Amount of Coverage — Policy Line HO-5 — Header # HO-0612 (ed. 06-24) — ORDINANCE OR LAW — INCR...
-4. score=0.7397  HO-0612 (HO-5, ed.06-24)  Clause 1  `structure_aware::HO-0612::002`
-   Form HO-0612 (ed. 06-24) — Ordinance or Law - Increased Amount of Coverage — Policy Line HO-5 — Clause 1 — Increased Limit | Item | Base wording | As ...
-5. score=0.7375  HO-0612 (HO-5, ed.06-24)  Clause 1  `structure_aware::HO-0612::004`
-   Form HO-0612 (ed. 06-24) — Ordinance or Law - Increased Amount of Coverage — Policy Line HO-5 — Clause 1 — Increased Limit | Item | Base wording | As ...
+Q: What does E-22 exclude on endorsement HO-0455 ed. 01-24?
+mode=dense  gold=structure_aware::HO-0455@01-24::010  gold_rank=None  hit@3=False  answer_ok=False  label=R (R)
+exact tokens in question: ['E-22', 'HO-0455', '01-24']  (top-3 chunks carrying all of them: 0/3)
+candidates (final order):
+   1. dense#1(0.721)  structure_aware::HO-0788@05-24::001
+      HO-0788 ed.05-24 Clause 1: The definitions in Clause 2 replace any conflicting definition in the base wording and ...
+   2. dense#2(0.719)  structure_aware::HO-2199@02-24::002
+      HO-2199 ed.02-24 Clause 2: | E-30 | Any loss to covered property occurring during a home-sharing occupancy | Build...
+   3. dense#3(0.717)  structure_aware::HO-2199@02-24::005
+      HO-2199 ed.02-24 Clause 2: | E-33 | Any loss arising out of a business conducted on the residence premises, includ...
+   4. dense#4(0.710)  structure_aware::HO-2199@02-24::006
+      HO-2199 ed.02-24 Clause 2: | E-34 | Loss to property held for rental to others, or to furnishings provided for the...
+   5. dense#5(0.710)  structure_aware::HO-2199@02-24::004
+      HO-2199 ed.02-24 Clause 2: | E-32 | Bodily injury or property damage arising out of a home-sharing occupancy | Sec...
+  gold structure_aware::HO-0455@01-24::010 not within the 25 candidates
+answer quoted from: structure_aware::HO-0788@05-24::001
+evidence: gold `structure_aware::HO-0455@01-24::010` at dense below rank 25 [-]; top-3 = HO-0788@05-24 Clause 1, HO-2199@02-24 E-30, HO-2199@02-24 E-33; 0/3 of the top-3 carry ['E-22', 'HO-0455', '01-24']
 ```
 
-#### Q8 — How is 'sudden and accidental' defined for the purposes of these endorsements?
-
-Gold: **HO-0788 Clause 2** (needs `unexpected and unintended` AND `identifiable point in time` in the same chunk)
-
-`baseline` — HIT at rank 1
+`hybrid — AFTER`
 
 ```
-1. score=0.8216  HO-0788 (HO-3, ed.05-24)  Header  `baseline::HO-0788::000`
-   # HO-0788 (ed. 05-24) — DEFINITIONS AMENDMENT ENDORSEMENT Policy Line: HO-3 Homeowners | Edition Date: 05-24 | Effective: May 1, 2024 This endorsement...
-2. score=0.7676  HO-0788 (HO-3, ed.05-24)  Clause 3  `baseline::HO-0788::003`
-   exclusion in another endorsement carries an exception for a sudden and accidental discharge, that exception is read using the definition in Clause 2.1...
-3. score=0.6331  HO-0788 (HO-3, ed.05-24)  Clause 2  `baseline::HO-0788::001`
-   n time. A discharge of water is sudden and accidental where the escape begins abruptly, regardless of how long the resulting water continues to flow b...
-4. score=0.6322  HO-0304 (HO-3, ed.03-24)  Header  `baseline::HO-0304::000`
-   # HO-0304 (ed. 03-24) — WATER DAMAGE — LIMITED COVERAGE ENDORSEMENT Policy Line: HO-3 Homeowners | Edition Date: 03-24 | Effective: March 1, 2024 This...
-5. score=0.6267  HO-0304 (HO-3, ed.03-24)  Clause 3  `baseline::HO-0304::004`
-   e, while the dwelling is vacant, unoccupied, or under construction | Building and contents | Does not apply if the insured used reasonable care to mai...
+Q: What does E-22 exclude on endorsement HO-0455 ed. 01-24?
+mode=hybrid  gold=structure_aware::HO-0455@01-24::010  gold_rank=4  hit@3=False  answer_ok=False  label=R (R)
+exact tokens in question: ['E-22', 'HO-0455', '01-24']  (top-3 chunks carrying all of them: 0/3)
+candidates (final order):
+   1. dense#1(0.721)  bm25#19(2.828)  rrf#1(0.029)  structure_aware::HO-0788@05-24::001
+      HO-0788 ed.05-24 Clause 1: The definitions in Clause 2 replace any conflicting definition in the base wording and ...
+   2. dense#3(0.717)  bm25#20(2.772)  rrf#2(0.028)  structure_aware::HO-2199@02-24::005
+      HO-2199 ed.02-24 Clause 2: | E-33 | Any loss arising out of a business conducted on the residence premises, includ...
+   3. dense#13(0.676)  bm25#24(2.367)  rrf#3(0.026)  structure_aware::HO-0304@01-25::000
+      HO-0304 ed.01-25 Header: This endorsement modifies insurance provided under the HOMEOWNERS POLICY WORDING. All o...
+   4. dense#-  bm25#1(8.793)  rrf#4(0.016)  structure_aware::HO-0455@01-24::010  <-- GOLD
+      HO-0455 ed.01-24 Clause 3: | E-22 | Loss to roof surfacing caused by wear, tear, deterioration, or manufacturing d...
+   5. dense#2(0.719)  bm25#-  rrf#5(0.016)  structure_aware::HO-2199@02-24::002
+      HO-2199 ed.02-24 Clause 2: | E-30 | Any loss to covered property occurring during a home-sharing occupancy | Build...
+answer quoted from: structure_aware::HO-0788@05-24::001
+evidence: gold `structure_aware::HO-0455@01-24::010` at hybrid rank 4 [bm25#1(8.793), rrf#4(0.016)]; top-3 = HO-0788@05-24 Clause 1, HO-2199@02-24 E-33, HO-0304@01-25 Header; 0/3 of the top-3 carry ['E-22', 'HO-0455', '01-24']
 ```
 
-`structure_aware` — HIT at rank 2
+### G06 — Is there a buy-back for E-32 under HO-2199 ed. 02-24?
+
+Gold: `structure_aware::HO-2199@02-24::004` · known answer: Yes - E-32 (liability arising out of a home-sharing occupancy) does not apply where the Home-Sharing Liability Buy-Back is shown in the Declarations.
+
+**Verdict: unchanged (still a hit)**
+
+`dense — BEFORE`
 
 ```
-1. score=0.7743  HO-0788 (HO-3, ed.05-24)  Clause 3  `structure_aware::HO-0788::004`
-   Form HO-0788 (ed. 05-24) — Definitions Amendment Endorsement — Policy Line HO-3 — Clause 3 — Interaction With Exclusions 3.1 Where an exclusion in ano...
-2. score=0.7233  HO-0788 (HO-3, ed.05-24)  Clause 2  `structure_aware::HO-0788::002`
-   Form HO-0788 (ed. 05-24) — Definitions Amendment Endorsement — Policy Line HO-3 — Clause 2 — Amended Definitions 2.1 Sudden and accidental means an ev...
-3. score=0.6324  HO-0788 (HO-3, ed.05-24)  Clause 1  `structure_aware::HO-0788::001`
-   Form HO-0788 (ed. 05-24) — Definitions Amendment Endorsement — Policy Line HO-3 — Clause 1 — Scope The definitions in Clause 2 replace any conflicting...
-4. score=0.6256  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::010`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-5. score=0.6174  HO-0788 (HO-3, ed.05-24)  Header  `structure_aware::HO-0788::000`
-   Form HO-0788 (ed. 05-24) — Definitions Amendment Endorsement — Policy Line HO-3 — Header # HO-0788 (ed. 05-24) — DEFINITIONS AMENDMENT ENDORSEMENT Pol...
+Q: Is there a buy-back for E-32 under HO-2199 ed. 02-24?
+mode=dense  gold=structure_aware::HO-2199@02-24::004  gold_rank=1  hit@3=True  answer_ok=True  label=PASS (PASS)
+exact tokens in question: ['E-32', 'HO-2199', '02-24']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.728)  structure_aware::HO-2199@02-24::004  <-- GOLD
+      HO-2199 ed.02-24 Clause 2: | E-32 | Bodily injury or property damage arising out of a home-sharing occupancy | Sec...
+   2. dense#2(0.701)  structure_aware::HO-2199@02-24::005
+      HO-2199 ed.02-24 Clause 2: | E-33 | Any loss arising out of a business conducted on the residence premises, includ...
+   3. dense#3(0.695)  structure_aware::HO-2199@02-24::002
+      HO-2199 ed.02-24 Clause 2: | E-30 | Any loss to covered property occurring during a home-sharing occupancy | Build...
+   4. dense#4(0.693)  structure_aware::HO-2199@02-24::006
+      HO-2199 ed.02-24 Clause 2: | E-34 | Loss to property held for rental to others, or to furnishings provided for the...
+   5. dense#5(0.683)  structure_aware::HO-2199@02-24::003
+      HO-2199 ed.02-24 Clause 2: | E-31 | Theft or mysterious disappearance of personal property during a home-sharing o...
+answer quoted from: structure_aware::HO-2199@02-24::004
+evidence: gold at dense rank 1; quoted from it
 ```
 
-## 3. Metadata filter on policy_line
-
-Query: *Does the seepage exclusion apply to water escaping from a burst supply line, and how many days does it take to trigger?*
-
-Both the homeowners form (HO-0304) and the dwelling-fire form (DP-0431) carry an exclusion coded **E-17**, and they say opposite things: HO-0304 excepts a sudden and accidental burst supply line and triggers at 14 days, DP-0431 has no exception at all and triggers at 7 days. Unfiltered dense retrieval cannot tell which policy line the user means. The filter can.
-
-**Unfiltered** (`structure_aware`, top-5):
+`hybrid — AFTER`
 
 ```
-1. score=0.7994  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::010`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-2. score=0.7963  DP-0431 (DP-3, ed.04-24)  Clause 3  `structure_aware::DP-0431::007`
-   Form DP-0431 (ed. 04-24) — Dwelling Fire - Water Damage and Seepage Exclusion — Policy Line DP-3 — Clause 3 — Exclusions | Code | Excluded cause of lo...
-3. score=0.7767  HO-0788 (HO-3, ed.05-24)  Clause 2  `structure_aware::HO-0788::002`
-   Form HO-0788 (ed. 05-24) — Definitions Amendment Endorsement — Policy Line HO-3 — Clause 2 — Amended Definitions 2.1 Sudden and accidental means an ev...
-4. score=0.7478  DP-0431 (DP-3, ed.04-24)  Clause 3  `structure_aware::DP-0431::008`
-   Form DP-0431 (ed. 04-24) — Dwelling Fire - Water Damage and Seepage Exclusion — Policy Line DP-3 — Clause 3 — Exclusions | Code | Excluded cause of lo...
-5. score=0.7398  DP-0431 (DP-3, ed.04-24)  Clause 4  `structure_aware::DP-0431::010`
-   Form DP-0431 (ed. 04-24) — Dwelling Fire - Water Damage and Seepage Exclusion — Policy Line DP-3 — Clause 4 — Conditions 4.1 Reporting. Loss must be r...
+Q: Is there a buy-back for E-32 under HO-2199 ed. 02-24?
+mode=hybrid  gold=structure_aware::HO-2199@02-24::004  gold_rank=1  hit@3=True  answer_ok=True  label=PASS (PASS)
+exact tokens in question: ['E-32', 'HO-2199', '02-24']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.728)  bm25#1(14.071)  rrf#1(0.033)  structure_aware::HO-2199@02-24::004  <-- GOLD
+      HO-2199 ed.02-24 Clause 2: | E-32 | Bodily injury or property damage arising out of a home-sharing occupancy | Sec...
+   2. dense#6(0.666)  bm25#3(9.318)  rrf#2(0.031)  structure_aware::HO-2199@02-24::000
+      HO-2199 ed.02-24 Header: This endorsement modifies insurance provided under the HOMEOWNERS POLICY WORDING.
+   3. dense#4(0.693)  bm25#5(8.069)  rrf#3(0.031)  structure_aware::HO-2199@02-24::006
+      HO-2199 ed.02-24 Clause 2: | E-34 | Loss to property held for rental to others, or to furnishings provided for the...
+   4. dense#2(0.701)  bm25#9(6.035)  rrf#4(0.031)  structure_aware::HO-2199@02-24::005
+      HO-2199 ed.02-24 Clause 2: | E-33 | Any loss arising out of a business conducted on the residence premises, includ...
+   5. dense#3(0.695)  bm25#11(5.820)  rrf#5(0.030)  structure_aware::HO-2199@02-24::002
+      HO-2199 ed.02-24 Clause 2: | E-30 | Any loss to covered property occurring during a home-sharing occupancy | Build...
+answer quoted from: structure_aware::HO-2199@02-24::004
+evidence: gold at hybrid rank 1; quoted from it
 ```
 
-**Filtered** on `policy_line == "HO-3"`:
+### G07 — DP-0431 ed. 04-24 E-17 - is there any sudden and accidental exception on the dwelling fire form?
+
+Gold: `structure_aware::DP-0431@04-24::007` · known answer: No exception. DP-0431 E-17 applies whether or not the discharge was sudden and accidental, and applies to a burst supply line; it triggers at 7 days.
+
+**Verdict: still a hit, label G→PASS**
+
+`dense — BEFORE`
 
 ```
-1. score=0.7994  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::010`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-2. score=0.7767  HO-0788 (HO-3, ed.05-24)  Clause 2  `structure_aware::HO-0788::002`
-   Form HO-0788 (ed. 05-24) — Definitions Amendment Endorsement — Policy Line HO-3 — Clause 2 — Amended Definitions 2.1 Sudden and accidental means an ev...
-3. score=0.7301  HO-0304 (HO-3, ed.03-24)  Clause 2  `structure_aware::HO-0304::005`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 2 — Coverage Grant We will pay for direct physical ...
-4. score=0.7161  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::009`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
-5. score=0.7138  HO-0304 (HO-3, ed.03-24)  Clause 3  `structure_aware::HO-0304::008`
-   Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions | Code | Excluded cause of loss | Ap...
+Q: DP-0431 ed. 04-24 E-17 - is there any sudden and accidental exception on the dwelling fire form?
+mode=dense  gold=structure_aware::DP-0431@04-24::007  gold_rank=3  hit@3=True  answer_ok=False  label=G (G-rank)
+exact tokens in question: ['E-17', 'DP-0431', '04-24']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#1(0.764)  structure_aware::DP-0431@04-24::008
+      DP-0431 ed.04-24 Clause 3: | E-21 | Any escape of water occurring while the dwelling has been vacant or unoccupied...
+   2. dense#2(0.752)  structure_aware::DP-0431@04-24::009
+      DP-0431 ed.04-24 Clause 3: | E-22 | Loss caused by the failure of a supply line, hose, or fitting older than 10 ye...
+   3. dense#3(0.747)  structure_aware::DP-0431@04-24::007  <-- GOLD
+      DP-0431 ed.04-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence of ...
+   4. dense#4(0.746)  structure_aware::DP-0431@04-24::005
+      DP-0431 ed.04-24 Clause 3: | E-14 | Flood, surface water, waves, tidal water, or overflow of a body of water | All...
+   5. dense#5(0.729)  structure_aware::DP-0431@04-24::006
+      DP-0431 ed.04-24 Clause 3: | E-15 | Water below the surface of the ground, including water exerting pressure on or...
+answer quoted from: structure_aware::DP-0431@04-24::008
+evidence: gold `structure_aware::DP-0431@04-24::007` IS in the top-3 at rank 3, but the answer step reads ONLY rank 1 and quoted `structure_aware::DP-0431@04-24::008` (DP-0431@04-24 E-21)
 ```
 
-Top-1 changed: **False** — `HO-0304` (`structure_aware::HO-0304::010`, score 0.7994) → `HO-0304` (`structure_aware::HO-0304::010`, score 0.7994).
-
-## 4. Cited answers (3 answerable questions)
-
-### Q1 — Does exclusion E-17 apply to water damage from a burst supply line under HO-0304?
-
-**Refused:** False  |  **Top retrieval score:** 0.8189
-
-**Answer:** | Code | Excluded cause of loss | Applies to | Exception |
-| E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or condensation of humidity, moisture, or vapour, that occurs over a period of 14 days or more, whether or not the seepage was known to any insured | All covered property, including the plumbing system itself | Does not apply to a sudden and accidental discharge as defined in HO-0788, including a burst supply line, provided the loss is reported within 30 days |
-
-(Per HO-0304 ed. 03-24, Clause 3, policy line HO-3.)
-
-**Citations:**
-
-- [`structure_aware::HO-0304::010`](#structure_awareho-0304010) — **HO-0304 Clause 3** — "| Code | Excluded cause of loss | Applies to | Exception |
-| E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or condensation of humidity, moisture, or vapour, that occurs over a period of 14 days or more, whether or not the seepage was known to any insured | All covered property, including the plumbing system itself | Does not apply to a sudden and accidental discharge as defined in HO-0788, including a burst supply line, provided the loss is reported within 30 days |"
-
-Each chunk_id links to appendix A, which reproduces the indexed chunk verbatim.
-
-**Known-correct answer:** No. E-17 excludes seepage lasting 14 days or more, but carries an express exception for a sudden and accidental discharge including a burst supply line, provided the loss is reported within 30 days.
-
-### Q6 — What is the water damage deductible per occurrence under the limited water damage endorsement?
-
-**Refused:** False  |  **Top retrieval score:** 0.8564
-
-**Answer:** | Item | Amount |
-| Water Damage Deductible | $2,500 per occurrence |
-
-(Per HO-0304 ed. 03-24, Clause 1, policy line HO-3.)
-
-**Citations:**
-
-- [`structure_aware::HO-0304::003`](#structure_awareho-0304003) — **HO-0304 Clause 1** — "| Item | Amount |
-| Water Damage Deductible | $2,500 per occurrence |"
-
-Each chunk_id links to appendix A, which reproduces the indexed chunk verbatim.
-
-**Known-correct answer:** $2,500 per occurrence, reduced to $1,000 where a licensed plumber's inspection report dated within 12 months of the loss is produced.
-
-### Q7 — How much ordinance or law coverage does the increased-amount endorsement provide?
-
-**Refused:** False  |  **Top retrieval score:** 0.7968
-
-**Answer:** The Ordinance or Law limit is increased from 10% of the Coverage A limit to 25% of the Coverage A limit. This increased amount is additional insurance and does not reduce the Coverage A limit.
-
-(Per HO-0612 ed. 06-24, Clause 1, policy line HO-5.)
-
-**Citations:**
-
-- [`structure_aware::HO-0612::001`](#structure_awareho-0612001) — **HO-0612 Clause 1** — "The Ordinance or Law limit is increased from 10% of the Coverage A limit to 25% of the Coverage A limit. This increased amount is additional insurance and does not reduce the Coverage A limit."
-
-Each chunk_id links to appendix A, which reproduces the indexed chunk verbatim.
-
-**Known-correct answer:** 25% of the Coverage A limit, up from 10% in the base wording, as additional insurance.
-
-## 5. Refusal transcripts (3 out-of-corpus questions)
-
-### R1 — What is the reserve-setting threshold for claim CLM-2024-88431?
+`hybrid — AFTER`
 
 ```
-refused    : True
-gate       : term_coverage
-top_score  : 0.6923
-answer     : I could not find this in the indexed endorsements, so I cannot answer it. Answering would mean inventing a coverage position.
-reason     : Only 25% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: reserve-setting, threshold, clm-2024-88431. Refused without composing an answer.
-citations  : []
+Q: DP-0431 ed. 04-24 E-17 - is there any sudden and accidental exception on the dwelling fire form?
+mode=hybrid  gold=structure_aware::DP-0431@04-24::007  gold_rank=1  hit@3=True  answer_ok=True  label=PASS (PASS)
+exact tokens in question: ['E-17', 'DP-0431', '04-24']  (top-3 chunks carrying all of them: 1/3)
+candidates (final order):
+   1. dense#3(0.747)  bm25#2(15.206)  rrf#1(0.032)  structure_aware::DP-0431@04-24::007  <-- GOLD
+      DP-0431 ed.04-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence of ...
+   2. dense#6(0.722)  bm25#1(16.081)  rrf#2(0.032)  structure_aware::DP-0431@04-24::000
+      DP-0431 ed.04-24 Header: This endorsement modifies insurance provided under the DWELLING FIRE POLICY WORDING. It...
+   3. dense#1(0.764)  bm25#7(11.366)  rrf#3(0.031)  structure_aware::DP-0431@04-24::008
+      DP-0431 ed.04-24 Clause 3: | E-21 | Any escape of water occurring while the dwelling has been vacant or unoccupied...
+   4. dense#5(0.729)  bm25#5(12.018)  rrf#4(0.031)  structure_aware::DP-0431@04-24::006
+      DP-0431 ed.04-24 Clause 3: | E-15 | Water below the surface of the ground, including water exerting pressure on or...
+   5. dense#2(0.752)  bm25#9(10.337)  rrf#5(0.031)  structure_aware::DP-0431@04-24::009
+      DP-0431 ed.04-24 Clause 3: | E-22 | Loss caused by the failure of a supply line, hose, or fitting older than 10 ye...
+answer quoted from: structure_aware::DP-0431@04-24::007
+evidence: gold at hybrid rank 1; quoted from it
 ```
 
-Best chunks retrieved before the refusal:
+### G08 — Insured says hail knocked granules off the shingles but the roof is not leaking. Covered, or cosmetic?
+
+Gold: `structure_aware::HO-0455@01-24::009` · known answer: Excluded under E-21 as cosmetic damage that does not compromise the water-shedding function (granule loss is named), unless the Cosmetic Damage Buy-Back is shown in the Declarations.
+
+**Verdict: unchanged (still a hit)**
+
+`dense — BEFORE`
 
 ```
-1. score=0.6923  HO-0304  Clause 1  `structure_aware::HO-0304::002`
-2. score=0.69  HO-0304  Clause 1  `structure_aware::HO-0304::004`
-3. score=0.6594  HO-0304  Clause 1  `structure_aware::HO-0304::003`
+Q: Insured says hail knocked granules off the shingles but the roof is not leaking. Covered, or cosmetic?
+mode=dense  gold=structure_aware::HO-0455@01-24::009  gold_rank=2  hit@3=True  answer_ok=False  label=G (G-refuse)
+candidates (final order):
+   1. dense#1(0.719)  structure_aware::HO-0455@01-24::001
+      HO-0455 ed.01-24 Clause 1: Loss to roof surfacing caused by windstorm or hail is settled at actual cash value, not...
+   2. dense#2(0.705)  structure_aware::HO-0455@01-24::009  <-- GOLD
+      HO-0455 ed.01-24 Clause 3: | E-21 | Cosmetic damage to roof surfacing that does not compromise the water-shedding ...
+   3. dense#3(0.665)  structure_aware::HO-0455@01-24::013
+      HO-0455 ed.01-24 Clause 4: 4.2 The insured must produce documentation of roof age. Where no documentation is produ...
+   4. dense#4(0.657)  structure_aware::HO-0455@01-24::010
+      HO-0455 ed.01-24 Clause 3: | E-22 | Loss to roof surfacing caused by wear, tear, deterioration, or manufacturing d...
+   5. dense#5(0.657)  structure_aware::HO-0455@01-24::012
+      HO-0455 ed.01-24 Clause 3: | E-24 | Loss caused by repair, alteration, or installation work performed on the roof ...
+answer quoted from: None
+evidence: gold `structure_aware::HO-0455@01-24::009` IS in the top-3 at rank 2, but the answer step REFUSED (gate=term_coverage: Only 50% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: says, knocked, granules, shingles, leaking)
 ```
 
-### R2 — Who is the assigned adjuster for policy HO-99213, and what is their direct phone number?
+`hybrid — AFTER`
 
 ```
-refused    : True
-gate       : term_coverage
-top_score  : 0.7034
-answer     : I could not find this in the indexed endorsements, so I cannot answer it. Answering would mean inventing a coverage position.
-reason     : Only 43% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: assigned, adjuster, ho-99213, phone. Refused without composing an answer.
-citations  : []
+Q: Insured says hail knocked granules off the shingles but the roof is not leaking. Covered, or cosmetic?
+mode=hybrid  gold=structure_aware::HO-0455@01-24::009  gold_rank=2  hit@3=True  answer_ok=False  label=G (G-refuse)
+candidates (final order):
+   1. dense#1(0.719)  bm25#2(11.594)  rrf#1(0.033)  structure_aware::HO-0455@01-24::001
+      HO-0455 ed.01-24 Clause 1: Loss to roof surfacing caused by windstorm or hail is settled at actual cash value, not...
+   2. dense#2(0.705)  bm25#1(13.133)  rrf#2(0.033)  structure_aware::HO-0455@01-24::009  <-- GOLD
+      HO-0455 ed.01-24 Clause 3: | E-21 | Cosmetic damage to roof surfacing that does not compromise the water-shedding ...
+   3. dense#3(0.665)  bm25#3(10.133)  rrf#3(0.032)  structure_aware::HO-0455@01-24::013
+      HO-0455 ed.01-24 Clause 4: 4.2 The insured must produce documentation of roof age. Where no documentation is produ...
+   4. dense#5(0.657)  bm25#17(5.646)  rrf#4(0.028)  structure_aware::HO-0455@01-24::012
+      HO-0455 ed.01-24 Clause 3: | E-24 | Loss caused by repair, alteration, or installation work performed on the roof ...
+   5. dense#22(0.600)  bm25#7(7.847)  rrf#5(0.027)  structure_aware::HO-0304@01-25::011
+      HO-0304 ed.01-25 Clause 3: | E-18 | Freezing of a plumbing, heating, air conditioning, or automatic fire protectiv...
+answer quoted from: None
+evidence: gold `structure_aware::HO-0455@01-24::009` IS in the top-3 at rank 2, but the answer step REFUSED (gate=term_coverage: Only 50% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: says, knocked, granules, shingles, leaking)
 ```
 
-Best chunks retrieved before the refusal:
+### G09 — Asphalt shingle roof, 12 years old, hail loss. What percentage of replacement cost do we pay?
+
+Gold: `structure_aware::HO-0455@01-24::005` · known answer: 60% - the 11 to 15 years band of the Payment Schedule.
+
+**Verdict: **still broken****
+
+`dense — BEFORE`
 
 ```
-1. score=0.7034  HO-2199  Header  `structure_aware::HO-2199::000`
-2. score=0.6945  HO-0304  Header  `structure_aware::HO-0304::000`
-3. score=0.6889  HO-0304  Clause 1  `structure_aware::HO-0304::004`
+Q: Asphalt shingle roof, 12 years old, hail loss. What percentage of replacement cost do we pay?
+mode=dense  gold=structure_aware::HO-0455@01-24::005  gold_rank=4  hit@3=False  answer_ok=False  label=R (R)
+candidates (final order):
+   1. dense#1(0.768)  structure_aware::HO-0455@01-24::001
+      HO-0455 ed.01-24 Clause 1: Loss to roof surfacing caused by windstorm or hail is settled at actual cash value, not...
+   2. dense#2(0.756)  structure_aware::HO-0455@01-24::004
+      HO-0455 ed.01-24 Clause 2: | 6 to 10 years | 80% | 95% |
+   3. dense#3(0.756)  structure_aware::HO-0455@01-24::007
+      HO-0455 ed.01-24 Clause 2: | 21 to 25 years | 25% | 55% |
+   4. dense#4(0.755)  structure_aware::HO-0455@01-24::005  <-- GOLD
+      HO-0455 ed.01-24 Clause 2: | 11 to 15 years | 60% | 85% |
+   5. dense#5(0.751)  structure_aware::HO-0455@01-24::006
+      HO-0455 ed.01-24 Clause 2: | 16 to 20 years | 40% | 70% |
+answer quoted from: structure_aware::HO-0455@01-24::001
+evidence: gold `structure_aware::HO-0455@01-24::005` at dense rank 4 [dense#4(0.755)]; top-3 = HO-0455@01-24 Clause 1, HO-0455@01-24 Clause 2, HO-0455@01-24 Clause 2
 ```
 
-### R3 — What is the current reinsurance attachment point for our homeowners book this treaty year?
+`hybrid — AFTER`
 
 ```
-refused    : True
-gate       : term_coverage
-top_score  : 0.7133
-answer     : I could not find this in the indexed endorsements, so I cannot answer it. Answering would mean inventing a coverage position.
-reason     : Only 50% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: reinsurance, attachment, book, treaty. Refused without composing an answer.
-citations  : []
+Q: Asphalt shingle roof, 12 years old, hail loss. What percentage of replacement cost do we pay?
+mode=hybrid  gold=structure_aware::HO-0455@01-24::005  gold_rank=5  hit@3=False  answer_ok=False  label=R (R)
+candidates (final order):
+   1. dense#1(0.768)  bm25#1(15.616)  rrf#1(0.033)  structure_aware::HO-0455@01-24::001
+      HO-0455 ed.01-24 Clause 1: Loss to roof surfacing caused by windstorm or hail is settled at actual cash value, not...
+   2. dense#2(0.756)  bm25#5(13.705)  rrf#2(0.032)  structure_aware::HO-0455@01-24::004
+      HO-0455 ed.01-24 Clause 2: | 6 to 10 years | 80% | 95% |
+   3. dense#8(0.727)  bm25#2(14.325)  rrf#3(0.031)  structure_aware::HO-0455@01-24::013
+      HO-0455 ed.01-24 Clause 4: 4.2 The insured must produce documentation of roof age. Where no documentation is produ...
+   4. dense#7(0.747)  bm25#3(13.815)  rrf#4(0.031)  structure_aware::HO-0455@01-24::008
+      HO-0455 ed.01-24 Clause 2: | Over 25 years | 15% | 40% |
+   5. dense#4(0.755)  bm25#6(13.705)  rrf#5(0.031)  structure_aware::HO-0455@01-24::005  <-- GOLD
+      HO-0455 ed.01-24 Clause 2: | 11 to 15 years | 60% | 85% |
+answer quoted from: structure_aware::HO-0455@01-24::001
+evidence: gold `structure_aware::HO-0455@01-24::005` at hybrid rank 5 [dense#4(0.755), bm25#6(13.705), rrf#5(0.031)]; top-3 = HO-0455@01-24 Clause 1, HO-0455@01-24 Clause 2, HO-0455@01-24 Clause 4
 ```
 
-Best chunks retrieved before the refusal:
+### G10 — Policyholder runs a bookkeeping business from a spare bedroom, no staff, no clients on site, about $8k a year. Does the business exclusion knock out the claim?
+
+Gold: `structure_aware::HO-2199@02-24::005` · known answer: No. E-33 does not apply to an incidental office occupancy with no employees and no customer visits where annual gross receipts do not exceed $10,000.
+
+**Verdict: unchanged (still a hit)**
+
+`dense — BEFORE`
 
 ```
-1. score=0.7133  HO-2199  Header  `structure_aware::HO-2199::000`
-2. score=0.7002  HO-2199  Clause 4  `structure_aware::HO-2199::008`
-3. score=0.6735  HO-0788  Header  `structure_aware::HO-0788::000`
+Q: Policyholder runs a bookkeeping business from a spare bedroom, no staff, no clients on site, about $8k a year. Does the business exclusion knock out the claim?
+mode=dense  gold=structure_aware::HO-2199@02-24::005  gold_rank=1  hit@3=True  answer_ok=False  label=G (G-refuse)
+candidates (final order):
+   1. dense#1(0.742)  structure_aware::HO-2199@02-24::005  <-- GOLD
+      HO-2199 ed.02-24 Clause 2: | E-33 | Any loss arising out of a business conducted on the residence premises, includ...
+   2. dense#2(0.682)  structure_aware::HO-2199@02-24::008
+      HO-2199 ed.02-24 Clause 4: A home-sharing surcharge of 18% of the base premium applies for any policy year in whic...
+   3. dense#3(0.682)  structure_aware::HO-2199@02-24::006
+      HO-2199 ed.02-24 Clause 2: | E-34 | Loss to property held for rental to others, or to furnishings provided for the...
+   4. dense#4(0.677)  structure_aware::HO-2199@02-24::004
+      HO-2199 ed.02-24 Clause 2: | E-32 | Bodily injury or property damage arising out of a home-sharing occupancy | Sec...
+   5. dense#5(0.676)  structure_aware::HO-2199@02-24::003
+      HO-2199 ed.02-24 Clause 2: | E-31 | Theft or mysterious disappearance of personal property during a home-sharing o...
+answer quoted from: None
+evidence: gold `structure_aware::HO-2199@02-24::005` IS in the top-3 at rank 1, but the answer step REFUSED (gate=term_coverage: Only 50% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: policyholder, bookkeeping, spare, bedroom, staff, clients, knock)
 ```
 
-### 5.1 What actually gates the refusal
-
-The obvious gate is a retrieval-score floor: if nothing scores above T, refuse. We measured whether such a T exists, and it does not.
-
-| Question | Top-1 cosine | Term coverage | In corpus? |
-|---|---|---|---|
-| Q6 — What is the water damage deductible per occurrence under the limited water damage endorsement? | 0.8564 | 100% | yes |
-| Q1 — Does exclusion E-17 apply to water damage from a burst supply line under HO-0304? | 0.8189 | 100% | yes |
-| Q2 — The dwelling was left vacant and the pipes froze. Is that loss excluded under HO-0304? | 0.8142 | 62% | yes |
-| Q7 — How much ordinance or law coverage does the increased-amount endorsement provide? | 0.7968 | 80% | yes |
-| Q8 — How is 'sudden and accidental' defined for the purposes of these endorsements? | 0.7743 | 100% | yes |
-| Q3 — Is granule loss on a shingle roof covered, or is it treated as cosmetic damage? | 0.7504 | 88% | yes |
-| Q4 — Can the insured run a small home office and keep coverage under the home business exclusion? | 0.7419 | 78% | yes |
-| Q5 — What percentage of replacement cost is paid for a 12-year-old asphalt shingle roof? | 0.7174 | 75% | yes |
-| What is the current reinsurance attachment point for our homeowners book this treaty year? | 0.7133 | 50% | **no** |
-| Who is the assigned adjuster for policy HO-99213, and what is their direct phone number? | 0.7034 | 43% | **no** |
-| What is the reserve-setting threshold for claim CLM-2024-88431? | 0.6923 | 25% | **no** |
-
-**Cosine cannot separate them.** Weakest in-corpus question: **0.7174**. Strongest out-of-corpus question: **0.7133**. A gap of 0.0041 of a cosine point — any threshold that refuses all three out-of-corpus questions is within a rounding error of rejecting a question the corpus can answer.
-
-Diagnosis: cosine measures topical proximity, not whether the answer is present. "What is the reserve-setting threshold for claim CLM-2024-88431?" is *about* insurance claims, so it lands near insurance-claims text; the corpus simply has no reserve-setting rules in it. A bi-encoder cannot express that difference.
-
-**Term coverage can.** Checking the question's content words against the indexed corpus separates cleanly: worst in-corpus **62%** versus best out-of-corpus **50%** — a margin of 12%, roughly 31x wider than the cosine gap. The gate is set at 55%. Terms like `reserve-setting`, `CLM-2024-88431`, `adjuster`, `reinsurance` and `treaty` appear nowhere in the six endorsements, and that absence is a fact about the corpus rather than a similarity score.
-
-**The refusal is forced, not suggested.** There is no model deciding whether to be helpful: `generation.py` returns the refusal before any answer is composed. And the answer text, when there is one, is quoted verbatim from the cited chunk rather than written, so it cannot state anything the cited chunk does not.
-
-Honest limitation: 55% is tuned against 11 questions on a 6-form corpus. It is a defensible gate at this scale, not a universal constant — a larger corpus would need it re-measured, and a question phrased entirely in policy vocabulary about a fact the corpus lacks would still slip past gate 1 to gate 2.
-
-## 6. Bonus — precision wins retrieval, loses the answer
-
-Question: *A supply line under the kitchen sink burst while the family was away for three weeks. The water ran the entire time and was only found when they got home. Is the loss covered under HO-0304?*
-
-### `baseline`
-
-Forms present in top-5: DP-0431, HO-0304
-
-**Refused:** False
-
-**Answer:** | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or condensation of humidity, moisture, or vapour, that occurs over a period of 14 days or more, whether or not the seepage was known to any insured | All covered property, including the plumbing system itself | Does not apply to a sudden and accidental discharge as defined in HO-0788, including a burst supply line, provided the loss is reported within 30 days |
-
-(Per HO-0304 ed. 03-24, Clause 3, policy line HO-3.)
-
-- `baseline::HO-0304::003` — HO-0304 Clause 3
-
-### `structure_aware`
-
-Forms present in top-5: HO-0304
-
-**Refused:** False
-
-**Answer:** We will pay for direct physical loss to covered property caused by the sudden and accidental discharge, overflow, or escape of water or steam from a plumbing, heating, air conditioning, or automatic fire protective sprinkler system, or from a household appliance, subject to the Limited Water Damage Sublimit in Clause 1 and to the exclusions in Clause 3.
-
-(Per HO-0304 ed. 03-24, Clause 2, policy line HO-3.)
-
-- `structure_aware::HO-0304::005` — HO-0304 Clause 2
-
-## 7. Which chunker ships, and why
-
-**`structure_aware` ships.** It scored 8/8 hit-in-top-5 against 7/8 for the baseline, and the gap is wider than that headline: 6/8 versus 4/8 at rank 1, MRR 0.854 versus 0.656. It won while being handicapped — it indexes 67 chunks against the baseline's 25, so a fixed top-5 is a materially harder test for it (7.5% of its corpus versus 20.0% of the baseline's). Correcting for that would widen the gap, not narrow it.
-
-The mechanism is the one the task predicted. The baseline's 900-character window is blind to table structure, so it slices exclusion tables mid-row: the exclusion code lands in one chunk and the rule it scopes lands in the next. The structure-aware chunker emits one chunk per exclusion row, each stamped with its form number, edition date, policy line, clause and the table's own header row, so a row is never separated from what scopes it.
-
-### The retrieval that embarrassed us
-
-**Q1, baseline, rank 1: the wrong policy line.** Asked whether E-17 excludes a burst supply line *under HO-0304*, the baseline index returned `DP-0431` — a **DP-3 dwelling-fire form** — at rank 1 with score 0.7781, ahead of the correct `HO-0304` chunk at 0.7764. DP-0431's E-17 is not a near-miss, it is the inverse rule: it triggers at 7 days instead of 14 and carries **no sudden-and-accidental exception at all**. A claims handler reading top-1 would have denied a covered burst-pipe claim.
-
-The filter demo in section 3 is the same wound: DP-0431 takes top-1 by **0.0000** — a few ten-thousandths of a cosine point. Nothing about the embedding separates these two forms, because textually they are near-identical; the only thing that separates them is the `policy_line` metadata. That is the argument for filtering rather than for a better embedding model.
-
-**Q2, baseline: a miss that no amount of top-K would fix.** The baseline returned a chunk holding the E-18 *rule* without the code at rank 1, and a chunk holding the *code* without the rule at rank 2. We then checked the whole index: chunks carrying both `E-18` and "maintain heat" — baseline: **0**; structure-aware: **1** (structure_aware::HO-0304::011). The E-18 row is split across a chunk boundary, so the answer does not exist in the baseline index as a single retrievable unit. Raising top-K to 25 would not have found it. This is the failure we would never have seen by eyeballing retrieved text and calling it 'looks about right'.
-
-### What the structure-aware chunker costs
-
-It is not free. 2 question(s) got *worse*: Q5 (rank 1 → 3), Q8 (rank 1 → 2). Splitting a table into one chunk per row means the rows of a rate schedule now compete with each other for the same query — the 11-to-15-year band no longer arrives inside a chunk that shows the whole schedule, so its lone row is a weaker match than the baseline's fat chunk containing every band at once. Precision on exclusion rows was bought with recall on continuous tables.
-
-**Q5 is the sharpest version of that cost, and it is the retrieval that embarrassed us twice.** Asked for the payout on a *12-year-old* asphalt roof, the structure-aware index returns five sibling rows of the same payment schedule, spanning only 0.0076 of a cosine point:
+`hybrid — AFTER`
 
 ```
-1. score=0.7174  | 6 to 10 years | 80% | 95% |
-2. score=0.7172  | 21 to 25 years | 25% | 55% |
-3. score=0.7156  | 11 to 15 years | 60% | 85% |
-4. score=0.7121  | 16 to 20 years | 40% | 70% |
-5. score=0.7097  | Over 25 years | 15% | 40% |
+Q: Policyholder runs a bookkeeping business from a spare bedroom, no staff, no clients on site, about $8k a year. Does the business exclusion knock out the claim?
+mode=hybrid  gold=structure_aware::HO-2199@02-24::005  gold_rank=1  hit@3=True  answer_ok=False  label=G (G-refuse)
+candidates (final order):
+   1. dense#1(0.742)  bm25#1(23.161)  rrf#1(0.033)  structure_aware::HO-2199@02-24::005  <-- GOLD
+      HO-2199 ed.02-24 Clause 2: | E-33 | Any loss arising out of a business conducted on the residence premises, includ...
+   2. dense#2(0.682)  bm25#2(15.737)  rrf#2(0.032)  structure_aware::HO-2199@02-24::008
+      HO-2199 ed.02-24 Clause 4: A home-sharing surcharge of 18% of the base premium applies for any policy year in whic...
+   3. dense#4(0.677)  bm25#4(14.343)  rrf#3(0.031)  structure_aware::HO-2199@02-24::004
+      HO-2199 ed.02-24 Clause 2: | E-32 | Bodily injury or property damage arising out of a home-sharing occupancy | Sec...
+   4. dense#7(0.664)  bm25#5(11.725)  rrf#4(0.030)  structure_aware::HO-2199@02-24::007
+      HO-2199 ed.02-24 Clause 3: 3.2 More than 60 days of home-sharing occupancy in any policy year renders the risk ine...
+   5. dense#3(0.682)  bm25#11(9.548)  rrf#5(0.030)  structure_aware::HO-2199@02-24::006
+      HO-2199 ed.02-24 Clause 2: | E-34 | Loss to property held for rental to others, or to furnishings provided for the...
+answer quoted from: None
+evidence: gold `structure_aware::HO-2199@02-24::005` IS in the top-3 at rank 1, but the answer step REFUSED (gate=term_coverage: Only 50% of the question's content terms appear anywhere in the indexed endorsements (floor 55%). Absent entirely: policyholder, bookkeeping, spare, bedroom, staff, clients, knock)
 ```
 
-The gold row (`11 to 15 years | 60%`) lands at rank 3, behind `6 to 10 years | 80%`. The embedding has nothing to work with: once a row is severed from its schedule, `| 6 to 10 years | 80% | 95% |` and `| 11 to 15 years | 60% | 85% |` are near-identical strings of digits, and no bi-encoder maps "12-year-old" onto the arithmetic band that contains 12. Answering Q5 extractively from rank 1 would have confidently quoted **80%** — the wrong payout on a real claim. That is why Q5 is not one of the three questions taken through to generation in section 4, and why it is written up here instead of quietly dropped.
+### G11 — What definition of sudden and accidental do we apply when reading the seepage exclusion's exception?
 
-The fix is not a better embedding, it is a chunking rule: a rate schedule is one answerable unit and must not be split per row, whereas an exclusions table must be. Same document, opposite treatment, decided by what the table *is*.
+Gold: `structure_aware::HO-0788@05-24::002` · known answer: HO-0788 2.1: unexpected and unintended from the insured's standpoint, beginning at an identifiable point in time; a slow weep or drip is not sudden and accidental even if it later worsens abruptly.
 
-It also grows the index: 25 chunks → 67, of which 40 are single table rows. At six endorsements that is free. Across a full wording library it is the cost to watch.
+**Verdict: **REGRESSED****
 
-**Next change, not made today:** keep the per-row chunks for exclusion tables and stop splitting per row for rate schedules, where the whole table is the answerable unit. That is one variable and it gets measured on its own run.
-
-## Appendix A — cited chunks resolved
-
-Every chunk_id cited in section 4, fetched back out of the index by id and reproduced verbatim.
-
-<a id="structure_awareho-0304010"></a>
-
-### `structure_aware::HO-0304::010`
-
-- source_file: `HO-0304_ed03-24_water-damage-limited.md`
-- form_number: `HO-0304`  ·  policy_line: `HO-3`  ·  edition_date: `03-24`  ·  clause: `Clause 3`
+`dense — BEFORE`
 
 ```
-Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 3 — Exclusions
-
-| Code | Excluded cause of loss | Applies to | Exception |
-| E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or condensation of humidity, moisture, or vapour, that occurs over a period of 14 days or more, whether or not the seepage was known to any insured | All covered property, including the plumbing system itself | Does not apply to a sudden and accidental discharge as defined in HO-0788, including a burst supply line, provided the loss is reported within 30 days |
+Q: What definition of sudden and accidental do we apply when reading the seepage exclusion's exception?
+mode=dense  gold=structure_aware::HO-0788@05-24::002  gold_rank=1  hit@3=True  answer_ok=True  label=PASS (PASS)
+candidates (final order):
+   1. dense#1(0.784)  structure_aware::HO-0788@05-24::002  <-- GOLD
+      HO-0788 ed.05-24 Clause 2: 2.3 Constant or repeated seepage or leakage means an escape of water that is continuous...
+   2. dense#2(0.774)  structure_aware::HO-0788@05-24::004
+      HO-0788 ed.05-24 Clause 3: 3.3 Nothing in this endorsement creates coverage that is otherwise excluded, nor increa...
+   3. dense#3(0.735)  structure_aware::DP-0431@04-24::007
+      DP-0431 ed.04-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence of ...
+   4. dense#4(0.725)  structure_aware::HO-0304@03-24::010
+      HO-0304 ed.03-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   5. dense#5(0.711)  structure_aware::HO-0304@01-25::010
+      HO-0304 ed.01-25 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+answer quoted from: structure_aware::HO-0788@05-24::002
+evidence: gold at dense rank 1; quoted from it
 ```
 
-<a id="structure_awareho-0304003"></a>
-
-### `structure_aware::HO-0304::003`
-
-- source_file: `HO-0304_ed03-24_water-damage-limited.md`
-- form_number: `HO-0304`  ·  policy_line: `HO-3`  ·  edition_date: `03-24`  ·  clause: `Clause 1`
+`hybrid — AFTER`
 
 ```
-Form HO-0304 (ed. 03-24) — Water Damage - Limited Coverage Endorsement — Policy Line HO-3 — Clause 1 — Schedule and Applicability
-
-| Item | Amount |
-| Water Damage Deductible | $2,500 per occurrence |
+Q: What definition of sudden and accidental do we apply when reading the seepage exclusion's exception?
+mode=hybrid  gold=structure_aware::HO-0788@05-24::002  gold_rank=4  hit@3=False  answer_ok=False  label=R (R)
+candidates (final order):
+   1. dense#2(0.774)  bm25#1(13.829)  rrf#1(0.033)  structure_aware::HO-0788@05-24::004
+      HO-0788 ed.05-24 Clause 3: 3.3 Nothing in this endorsement creates coverage that is otherwise excluded, nor increa...
+   2. dense#3(0.735)  bm25#2(10.939)  rrf#2(0.032)  structure_aware::DP-0431@04-24::007
+      DP-0431 ed.04-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence of ...
+   3. dense#4(0.725)  bm25#4(8.724)  rrf#3(0.031)  structure_aware::HO-0304@03-24::010
+      HO-0304 ed.03-24 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+   4. dense#1(0.784)  bm25#9(8.015)  rrf#4(0.031)  structure_aware::HO-0788@05-24::002  <-- GOLD
+      HO-0788 ed.05-24 Clause 2: 2.3 Constant or repeated seepage or leakage means an escape of water that is continuous...
+   5. dense#7(0.701)  bm25#3(9.012)  rrf#5(0.031)  structure_aware::HO-0304@09-23::010
+      HO-0304 ed.09-23 Clause 3: | E-17 | Constant or repeated seepage or leakage of water or steam, or the presence or ...
+answer quoted from: structure_aware::HO-0788@05-24::004
+evidence: gold `structure_aware::HO-0788@05-24::002` at hybrid rank 4 [dense#1(0.784), bm25#9(8.015), rrf#4(0.031)]; top-3 = HO-0788@05-24 Clause 3, DP-0431@04-24 E-17, HO-0304@03-24 E-17
 ```
 
-<a id="structure_awareho-0612001"></a>
+### G12 — After the ordinance or law increase endorsement, what is the cap on increased cost of construction?
 
-### `structure_aware::HO-0612::001`
+Gold: `structure_aware::HO-0612@06-24::005` · known answer: $75,000 (up from $25,000 in the base wording).
 
-- source_file: `HO-0612_ed06-24_ordinance-or-law.md`
-- form_number: `HO-0612`  ·  policy_line: `HO-5`  ·  edition_date: `06-24`  ·  clause: `Clause 1`
+**Verdict: unchanged (still a hit)**
+
+`dense — BEFORE`
 
 ```
-Form HO-0612 (ed. 06-24) — Ordinance or Law - Increased Amount of Coverage — Policy Line HO-5 — Clause 1 — Increased Limit
+Q: After the ordinance or law increase endorsement, what is the cap on increased cost of construction?
+mode=dense  gold=structure_aware::HO-0612@06-24::005  gold_rank=1  hit@3=True  answer_ok=True  label=PASS (PASS)
+candidates (final order):
+   1. dense#1(0.800)  structure_aware::HO-0612@06-24::005  <-- GOLD
+      HO-0612 ed.06-24 Clause 1: | Increased cost of construction cap | $25,000 | $75,000 |
+   2. dense#2(0.742)  structure_aware::HO-0612@06-24::001
+      HO-0612 ed.06-24 Clause 1: The Ordinance or Law limit is increased from 10% of the Coverage A limit to 25% of the ...
+   3. dense#3(0.739)  structure_aware::HO-0612@06-24::006
+      HO-0612 ed.06-24 Clause 2: 2.3 Covered costs include the cost of bringing electrical, plumbing, and mechanical sys...
+   4. dense#4(0.715)  structure_aware::HO-0612@06-24::000
+      HO-0612 ed.06-24 Header: This endorsement increases the Ordinance or Law coverage provided under the HOMEOWNERS ...
+   5. dense#5(0.698)  structure_aware::HO-0612@06-24::003
+      HO-0612 ed.06-24 Clause 1: | Applies to demolition cost | Yes | Yes |
+answer quoted from: structure_aware::HO-0612@06-24::005
+evidence: gold at dense rank 1; quoted from it
+```
 
-The Ordinance or Law limit is increased from 10% of the Coverage A limit to 25% of the Coverage A limit. This increased amount is additional insurance and does not reduce the Coverage A limit.
+`hybrid — AFTER`
+
+```
+Q: After the ordinance or law increase endorsement, what is the cap on increased cost of construction?
+mode=hybrid  gold=structure_aware::HO-0612@06-24::005  gold_rank=1  hit@3=True  answer_ok=True  label=PASS (PASS)
+candidates (final order):
+   1. dense#1(0.800)  bm25#1(21.518)  rrf#1(0.033)  structure_aware::HO-0612@06-24::005  <-- GOLD
+      HO-0612 ed.06-24 Clause 1: | Increased cost of construction cap | $25,000 | $75,000 |
+   2. dense#3(0.739)  bm25#2(17.711)  rrf#2(0.032)  structure_aware::HO-0612@06-24::006
+      HO-0612 ed.06-24 Clause 2: 2.3 Covered costs include the cost of bringing electrical, plumbing, and mechanical sys...
+   3. dense#2(0.742)  bm25#5(14.081)  rrf#3(0.032)  structure_aware::HO-0612@06-24::001
+      HO-0612 ed.06-24 Clause 1: The Ordinance or Law limit is increased from 10% of the Coverage A limit to 25% of the ...
+   4. dense#4(0.715)  bm25#3(14.429)  rrf#4(0.031)  structure_aware::HO-0612@06-24::000
+      HO-0612 ed.06-24 Header: This endorsement increases the Ordinance or Law coverage provided under the HOMEOWNERS ...
+   5. dense#6(0.691)  bm25#6(13.114)  rrf#5(0.030)  structure_aware::HO-0612@06-24::011
+      HO-0612 ed.06-24 Clause 4: 4.2 The insured must produce the written permit condition or code citation relied upon....
+answer quoted from: structure_aware::HO-0612@06-24::005
+evidence: gold at hybrid rank 1; quoted from it
 ```
 

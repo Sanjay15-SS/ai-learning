@@ -1,7 +1,17 @@
 # Task Set D — Insurance Claims RAG
 
-**Week 4 is the current deliverable: [`results.md`](results.md).** Label the failures, then
-try to buy back hit-rate@3 with exactly one retrieval change.
+> This folder is the Week 3 snapshot and the Week 4 tree merged back into one
+> runnable project. `src/` and `data/` had been lost from the Week 4 tree and were
+> restored from the Week 3 snapshot plus the code diffs. What was rebuilt, and what
+> the rebuild does and does not reproduce, is in [`RECONSTRUCTION.md`](RECONSTRUCTION.md).
+
+**Week 5 is the current deliverable: [`results-week5.md`](results-week5.md)** — 117 traced
+questions, 20 read by hand, a ranked failure taxonomy in [`taxonomy.md`](taxonomy.md), the
+reading notes in [`notes-week5.md`](notes-week5.md), and a dated prediction in
+[`PREDICTION.md`](PREDICTION.md). Week 5 changes nothing in the answering path.
+
+**Week 4 is [`results.md`](results.md):** label the failures, then try to buy back
+hit-rate@3 with exactly one retrieval change.
 
 ```bash
 python3 -m pip install --user -r requirements.txt   # NOT `pip3` - see note below

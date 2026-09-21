@@ -1,164 +1,93 @@
-# Task Set D — Insurance Claims RAG
+# Task Set E — Ledgerline docs assistant (Weeks 6 and 7)
 
-> This folder is the Week 3 snapshot and the Week 4 tree merged back into one
-> runnable project. `src/` and `data/` had been lost from the Week 4 tree and were
-> restored from the Week 3 snapshot plus the code diffs. What was rebuilt, and what
-> the rebuild does and does not reproduce, is in [`RECONSTRUCTION.md`](RECONSTRUCTION.md).
+A docs assistant for a fictional payments API ("Ledgerline") with a **v2** and a **v3**,
+so that "a v2 endpoint recommended to a v3 user" is a failure that can actually happen.
 
-**Week 5 is the current deliverable: [`results-week5.md`](results-week5.md)** — 117 traced
-questions, 20 read by hand, a ranked failure taxonomy in [`taxonomy.md`](taxonomy.md), the
-reading notes in [`notes-week5.md`](notes-week5.md), and a dated prediction in
-[`PREDICTION.md`](PREDICTION.md). Week 5 changes nothing in the answering path.
-
-**Week 4 is [`results.md`](results.md):** label the failures, then try to buy back
-hit-rate@3 with exactly one retrieval change.
+- Week 6: validate the docs-answer judge before trusting its number.
+- Week 7: race the docs agent against a fixed workflow.
 
 ```bash
-python3 -m pip install --user -r requirements.txt   # NOT `pip3` - see note below
-python3 run_week4.py                         # writes results.md + eval_record.json
-python3 inspect_query.py --qid G01           # the inspection view for one question
-python3 inspect_query.py --qid G01 --mode dense
+python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt
+source .venv/bin/activate                   # every command below assumes the venv
+python3 selftest.py                         # 50 offline checks with a scripted fake model
 ```
 
-> **Use `python3 -m pip`, not `pip3`.** On a Mac with both Homebrew Python and the
-> python.org build installed, `pip3` and `python3` can be *different interpreters*: `pip3`
-> then fails with `error: externally-managed-environment` (PEP 668) while installing into a
-> Python that never runs this project. `python3 -m pip` always uses the pip belonging to the
-> `python3` you just named. Do not pass `--break-system-packages`. A venv works too:
-> `python3 -m venv .venv && source .venv/bin/activate && python3 -m pip install -r requirements.txt`
+**No API key needed.** By default every model call runs **locally**: Qwen2.5-3B-Instruct
+(4-bit, MLX, about 1.7 GB, downloaded once) on this Mac, with greedy decoding so re-runs
+repeat. The app, judge, agent and workflow all use this one model.
 
-| Week 4 headline | |
-|---|---|
-| Golden set | 12 real adjuster questions, `golden_set.jsonl`, each with its known-correct chunk_id; 7 carry an exact token (exclusion code / form number / edition) |
-| Baseline hit-rate@3 | **9/12**, frozen to `baseline_record.json` before any change |
-| Failure tally | 3 R · 5 G · 0 Not-In-Corpus (+1 uncounted NIC probe) |
-| The one change | `RETRIEVAL_MODE` dense → hybrid: dense top-25 + BM25 top-25, RRF k=60 |
-| After | **8/12**, p50 +~1.5 ms (inside the noise floor; `results.md` §6 has the run's exact figures) |
-| Decision | **do not ship** — see `results.md` §9 |
+Tokens are counted exactly, from the model's own tokenizer. Actual spend is **$0**, so
+the cost column is a *reference*: the same tokens priced at Claude Haiku 4.5 list rates
+($1/$5 per M). That keeps agent vs workflow comparable in dollars.
 
-Week 4 files: `golden_set.jsonl`, `probes.jsonl`, `src/bm25.py`, `src/inspect_view.py`,
-`src/mmr.py`, `inspect_query.py`, `run_week4.py`, `write_results.py`,
-[`code-diff-week4.md`](code-diff-week4.md).
+Set `ANTHROPIC_API_KEY` and the same code runs on `claude-opus-5` instead
+(`DOCS_BACKEND=anthropic`); `src/llm.py` is the only place a model is called.
 
-The Week 3 deliverable is still reproducible and now writes
-[`results-week3.md`](results-week3.md): `python3 run_pipeline.py`. It is pinned to the dense
-retriever it was measured with, so Week 4's change cannot silently restate Week 3's numbers.
+Run every command from this folder (`ai-learning-week-4/`). The scripts live in `week6/` and
+`week7/` and import `src/`, so they are run as modules: `python3 -m week7.agent`, not
+`python3 week7/agent.py`.
 
----
+## Week 6 — run it in this order (the order is the protocol)
 
-## Week 3 — ingest the new endorsement pack and prove the chunking finds the answer
+| # | command | produces |
+|---|---|---|
+| 0 | `git init && git add -A && git commit -m "chore: week 6 baseline"` | commit history is the ordering proof |
+| 1 | `python3 -m week6.traffic` then `python3 -m week6.traffic --failed` | 30 real app-v1 traces, and the ones that failed |
+| 2 | `python3 -m week6.promote <trace_id> --mode <mode> --must ...` (at least twice) | regression cases R01, R02, copied word for word from real failed traces |
+| 3 | `python3 -m week6.run_eval --no-judge` | app answers + assertion pass rate by mode (judge stays locked) |
+| 4 | `python3 -m week6.label`, then commit `labels_25.json` | **your** 25 blind labels, committed before any judge run |
+| 5 | `python3 -m week6.judge_eval run v1` | **agreement_before** + v1's disagreements |
+| 6 | write `prediction.txt` (one sentence), commit it | the prediction, dated before the iteration |
+| 7 | `python3 -m week6.judge_eval build-v2 <id> <id>` | `evals/judge_v2.txt` = v1 + two of v1's own disagreements as few-shot examples |
+| 8 | `python3 -m week6.judge_eval run v2` then `python3 -m week6.judge_eval report` | **agreement_after**, plus agreement on the 23 cases not used as examples |
+| 9 | `python3 -m week6.run_eval` | **the one command**: every case, assertions + judge, pass rate by mode, app v1 vs v2 |
 
-**The Week 3 deliverable is [`results-week3.md`](results-week3.md)** — the 8 questions with their gold
-form_number/clause, both hit-in-top-5 numbers, the per-question record, the
-search-only dump, the unfiltered vs filtered lists, the 3 cited answers, the 3
-refusal transcripts, the bonus, and the chunking defence.
-[`code-diff.md`](code-diff.md) is the checklist's code diff.
+Guards in code, not on trust: `week6/label.py` refuses once any judge output exists. The judge
+refuses until `labels_25.json` is final, matches the answers file, and was committed
+before the run. `build-v2` refuses without `prediction.txt` newer than the v1 run, and
+refuses examples that were not v1 disagreements.
 
-Everything runs locally. **No API key, no network, no model service.**
+**Assertions vs judge**: 7 deterministic assertions (`evals/assertions.py`) against 1
+judged criterion (`CORRECT_AND_USABLE`, binary). Four criteria moved out of the judge:
+`code_parses`, `endpoints_exist`, `version_stated`, `deprecations_noted`. See
+`evals/judge_v0_all_criteria.txt` (before) against `evals/judge_v1.txt` (after).
 
-## Run
+**Cases**: 25 authored cases in `evals/cases.jsonl`, one taxonomy mode each (6 modes,
+`evals/TAXONOMY.md`), plus the regression cases from step 2.
+
+**The one app change** (per-mode before/after in step 9): app v1 retrieves from every
+version; app v2 limits retrieval to the version the developer is on. Nothing else differs.
+
+## Week 7
 
 ```bash
-python3 -m pip install --user -r requirements.txt
-python3 run_pipeline.py
+python3 -m week7.agent "Port our POST /v2/charges call to v3"   # the loop, every lap logged
+python3 -m week7.workflow "Port our POST /v2/charges call to v3" # fixed 3 steps + 1 write, no loop
+python3 -m week7.race                                            # 10 questions x 2 -> race.csv
+python3 -m week7.agent --budget-demo                             # -> logs/budget_termination.log
+python3 -m week7.agent --tool-diff                               # -> TOOL_DESCRIPTIONS_DIFF.md
 ```
 
-That writes `results-week3.md`. Takes about 30 seconds.
+- **Third tool**: `check_deprecation(symbol, api_version: enum[v2,v3])`. The same change
+  sharpens `search_docs` and `get_openapi_spec`, whose old descriptions overlapped.
+- **Budgets** (`agent.Budget`): max iterations, max tokens, max cost, wall clock. All four
+  are checked before every call and after it. Tokens are summed over every lap.
+- **Race set** (`week7/race_questions.jsonl`): 5 questions where step 3 depends on step 2 (the
+  v2 endpoint is deprecated, so the replacement must be looked up), and 5 single-lookup
+  questions.
+- **Workflow**: the same tool implementations, model and output contract. It cannot take a
+  fourth look, so on a deprecated endpoint the replacement's spec is never fetched.
 
-## Pipeline
-
-```
-              6 endorsements
-                     |
- src/indexer.py   load + stamp form_number / policy_line / edition_date / source_file
-                     |
- src/chunkers.py  Strategy 1: Naive  ──┐   Strategy 2: Structure-Aware ──┐
-                                       |                                 |
- src/indexer.py   BAAI/bge-small-en-v1.5  (same model, both strategies)
-                                       |                                 |
-                  Chroma collection        Chroma collection
-                  (in-memory, HNSW, cosine)
-                                       |                                 |
- src/retriever.py top-K + policy_line filter (DB-side `where` clause)
-                     |
- src/generator.py answer quoted from the cited chunk, or a forced refusal
-                     |
- run_pipeline.py  measures both strategies, writes results-week3.md
-```
+The verdict is written from `race.csv` after the race has run, not before.
 
 ## Files
 
-```
-ai-task/
-├── data/
-│   └── endorsements/      the 6 forms + 2 further HO-0304 editions (Week 4)
-├── src/
-│   ├── __init__.py        config + the Document / Chunk records
-│   ├── chunkers.py        BOTH chunking strategies
-│   ├── indexer.py         load + form metadata, embed, Chroma HNSW index
-│   ├── retriever.py       top-K search + policy_line filtering
-│   └── generator.py       extractive answer + forced refusal
-│   ├── bm25.py            WEEK 4: BM25 over the indexed chunks
-│   ├── mmr.py             WEEK 4: MMR over the fused list (bonus)
-│   └── inspect_view.py    WEEK 4: the inspection view + the R/G/NIC label rule
-├── app.py                 ask one question by hand
-├── inspect_query.py       WEEK 4: inspection view for one question
-├── questions.json         the 8 Week 3 gold questions + 3 unanswerable
-├── golden_set.jsonl       WEEK 4: 12 adjuster questions + known-correct chunk_id
-├── probes.jsonl           WEEK 4: the uncounted Not-In-Corpus probe
-├── run_pipeline.py        Week 3: writes results-week3.md (pinned to dense)
-├── run_week4.py           <- WEEK 4 ONE COMMAND: writes results.md
-├── write_results.py       WEEK 4: renders results.md from eval_record.json
-├── baseline_record.json   WEEK 4: the 9/12 baseline, frozen before any change
-├── eval_record.json       WEEK 4: every number in results.md, machine-readable
-├── requirements.txt
-├── results.md             <- THE WEEK 4 DELIVERABLE (generated)
-├── results-week3.md       the Week 3 deliverable (generated)
-├── code-diff-week4.md     <- the ONE retrieval change (generated)
-├── code-diff.md           the Week 3 code diff (generated)
-└── README.md
-```
-
-## The two chunkers
-
-| | `baseline` | `structure_aware` |
-|---|---|---|
-| Split on | fixed 900-char windows, 150 overlap | form / clause headers |
-| Tables | cut wherever the window lands | one chunk per row |
-| Row context | whatever the window happened to include | form number + edition + policy line + clause + table header, always |
-
-Both stamp `source_file`, `form_number`, `policy_line`, `edition_date` on every
-chunk, and both use the same embedding model — changing the chunker and the
-embedding model in one run would teach you nothing about which one moved.
-
-## How answers and refusals work without a model
-
-The answer is **quoted verbatim** from the highest-scoring chunk, never composed,
-so it cannot state anything the cited chunk does not say. Refusal is a gate in
-code, not a request to a model:
-
-1. **Term coverage** — the question's content words are checked against the
-   indexed corpus. Measured margin: worst in-corpus 62%, best out-of-corpus 50%.
-2. **Score floor** — backstop for a query with no topical neighbour.
-
-Cosine similarity alone cannot gate this (out-of-corpus scores 0.69–0.71 against a
-legitimate 0.7174). `results-week3.md` section 5.1 shows the full measurement.
-
-## The questions
-
-`questions.json` holds the 8 known-answer questions with their gold form_number and
-clause, the 3 out-of-corpus questions, the filter-demo query and the bonus probe.
-They are data, so they can be reviewed without reading any code — and they were
-written from the endorsements before any search was run.
-
-## Swapping in the real endorsement pack
-
-Drop `.md`, `.txt` or `.pdf` files into `data/endorsements/` and re-run. Markdown
-uses YAML front matter for metadata; PDFs and plain text fall back to regex over
-the header block (`HO-0304 (ed. 03-24)`, `Policy Line: HO-3`). A document missing
-`form_number`, `policy_line` or `edition_date` raises at ingest rather than
-indexing a chunk with no provenance.
-
-> The 6 forms in `data/endorsements/` are stand-ins written to the spec in the task
-> statement (form numbers, edition dates, exclusions tables, exclusion code E-17
-> under HO-0304 ed. 03-24). Replace them with the supplied drop before submitting.
+| path | role |
+|---|---|
+| `corpus/` | 14 docs pages (v2 + v3), `openapi_v2.json`, `openapi_v3.json`, `changelog.json` |
+| `src/` | config, corpus search, tools, model wrapper, output contract, the Week 6 app |
+| `evals/` | cases, assertions, judge prompts, taxonomy |
+| `week6/` | `run_eval.py` · `label.py` · `judge_eval.py` · `traffic.py` · `promote.py` |
+| `week7/` | `agent.py` · `workflow.py` · `race.py` · `race_questions.jsonl` |
+| `make_report.py` | writes `RESULTS-week6.md` and `RESULTS-week7.md` from the run outputs |
+| `selftest.py` | 50 offline checks with a scripted fake model |

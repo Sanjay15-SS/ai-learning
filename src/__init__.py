@@ -1,62 +1,42 @@
-"""Insurance-claims RAG — Task Set D (Weeks 3-5).
+"""Ledgerline docs assistant - Task Set E, Weeks 6 and 7.
 
-Package-level configuration and the two data records every module shares.
+Config shared by every module. The corpus is a fictional payments API with a v2 and
+a v3, so that "a v2 endpoint recommended to a v3 user" is a failure that can happen.
 """
-from dataclasses import asdict, dataclass, field
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data" / "endorsements"
-RESULTS_PATH = ROOT / "results.md"                # Week 4 deliverable
-RESULTS_WEEK3_PATH = ROOT / "results-week3.md"    # Week 3 deliverable, still reproducible
-QUESTIONS_PATH = ROOT / "questions.json"          # Week 3 question set
-GOLDEN_SET_PATH = ROOT / "golden_set.jsonl"       # Week 4 golden set: 12 adjuster questions + gold chunk_id
+CORPUS = ROOT / "corpus"
+DOCS_DIR = CORPUS / "docs"
+RUNS = ROOT / "runs"
+TRACES = ROOT / "traces"
+LOGS = ROOT / "logs"
+EVALS = ROOT / "evals"
 
-EMBED_MODEL = "BAAI/bge-small-en-v1.5"   # MTEB-ranked bi-encoder, 384-dim
-TOP_K = 5
+API_VERSIONS = ("v2", "v3")
+CURRENT_VERSION = "v3"
 
-# Week 4: which retriever answers a query. "dense" is the Week 3 retriever, unchanged.
-# "hybrid" is THE one retrieval change: dense top-25 + BM25 top-25 -> RRF (k=60).
-RETRIEVAL_MODE = "hybrid"
-CANDIDATES = 25    # depth of each list before fusion
-RRF_K = 60         # the standard RRF constant; not tuned
+# Backend: "local" (Qwen2.5-3B on this Mac via MLX, no key) or "anthropic".
+# Default is local unless an Anthropic key is set.
+BACKEND = os.environ.get("DOCS_BACKEND") or (
+    "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "local")
 
-# Strategy 1 - the Week 3 chunker, unchanged.
-CHUNK_CHARS = 900
-OVERLAP_CHARS = 150
+# One model everywhere: app, judge, agent, workflow.
+MODEL = os.environ.get("DOCS_MODEL") or (
+    "claude-opus-5" if BACKEND == "anthropic" else "mlx-community/Qwen2.5-3B-Instruct-4bit")
 
-# Strategy 2 - structure-aware: cap on a prose chunk before it splits on paragraphs.
-STRUCTURE_MAX_CHARS = 1200
-
-STRATEGIES = ("baseline", "structure_aware")
-STRATEGY_LABELS = {
-    "baseline": "Naive Chunker",
-    "structure_aware": "Structure-Aware Chunker",
+# USD per million tokens (input, output). Cache writes bill at 1.25x input,
+# cache reads at 0.1x input. A server-side fallback bills at the model that ran.
+PRICES = {
+    "claude-opus-5": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+    # The local model costs $0 to run. Its cost column is a REFERENCE: its tokens priced
+    # at Claude Haiku 4.5 list rates, so agent vs workflow cost stays comparable in $.
+    "mlx-community/Qwen2.5-3B-Instruct-4bit": (1.00, 5.00),
 }
-
-# Refusal gates. See results.md section 5.1 for the measurement behind both.
-COVERAGE_FLOOR = 0.55   # fraction of question terms that must appear in the corpus
-SCORE_FLOOR = 0.35      # backstop for a query with no topical neighbour
-
-
-@dataclass
-class Document:
-    source_file: str
-    form_number: str
-    edition_date: str
-    policy_line: str
-    effective_date: str
-    title: str
-    text: str
-
-    def meta(self) -> dict:
-        d = asdict(self)
-        d.pop("text")
-        return d
-
-
-@dataclass
-class Chunk:
-    chunk_id: str
-    text: str
-    metadata: dict = field(default_factory=dict)
+COST_NOTE = ("" if BACKEND == "anthropic" else
+             "cost = reference only: local tokens priced at Claude Haiku 4.5 list rates "
+             "($1/$5 per M); actual spend is $0")

@@ -1,0 +1,121 @@
+{
+  "entries": [
+    {
+      "symbol": "POST /v2/charges",
+      "kind": "endpoint",
+      "status": "deprecated",
+      "since": "v3",
+      "replacement": "POST /v3/payment_intents",
+      "pattern": "/v2/charges(?![\\w/{])",
+      "note": "Charges are replaced by payment intents. Send an Idempotency-Key header (required)."
+    },
+    {
+      "symbol": "GET /v2/charges/{charge_id}",
+      "kind": "endpoint",
+      "status": "deprecated",
+      "since": "v3",
+      "replacement": "GET /v3/payment_intents/{intent_id}",
+      "pattern": "/v2/charges/(?:\\{|ch_)",
+      "note": "Retrieve the payment intent instead; ids change prefix from ch_ to pi_."
+    },
+    {
+      "symbol": "source",
+      "kind": "parameter",
+      "status": "removed",
+      "since": "v3",
+      "replacement": "payment_method",
+      "pattern": "[\\\"']source[\\\"']\\s*:|\\bsource\\s*=|`source`",
+      "note": "Card tokens are replaced by pm_ payment method ids."
+    },
+    {
+      "symbol": "charge",
+      "kind": "parameter",
+      "status": "renamed",
+      "since": "v3",
+      "replacement": "payment_intent",
+      "pattern": "[\\\"']charge[\\\"']\\s*:|\\bcharge\\s*=(?!=)|`charge`",
+      "note": "On POST /v3/refunds the refunded object is a payment intent."
+    },
+    {
+      "symbol": "card_token",
+      "kind": "parameter",
+      "status": "removed",
+      "since": "v3",
+      "replacement": "POST /v3/payment_methods/{pm_id}/attach",
+      "pattern": "\\bcard_token\\b",
+      "note": "Create a payment method and attach it to the customer."
+    },
+    {
+      "symbol": "GET /v2/customers/{customer_id}/cards",
+      "kind": "endpoint",
+      "status": "removed",
+      "since": "v3",
+      "replacement": "GET /v3/customers/{customer_id}/payment_methods",
+      "pattern": "/customers/\\{?[\\w]+\\}?/cards\\b",
+      "note": "Cards are payment methods of type card in v3."
+    },
+    {
+      "symbol": "page",
+      "kind": "parameter",
+      "status": "removed",
+      "since": "v3",
+      "replacement": "starting_after",
+      "pattern": "[\\\"']page[\\\"']\\s*:|\\bpage\\s*=\\s*\\d|`page`|\\bper_page\\b",
+      "note": "Page-number pagination is replaced by cursor pagination (limit + starting_after)."
+    },
+    {
+      "symbol": "per_page",
+      "kind": "parameter",
+      "status": "removed",
+      "since": "v3",
+      "replacement": "limit",
+      "pattern": "\\bper_page\\b",
+      "note": "Use limit (1-100)."
+    },
+    {
+      "symbol": "api_key",
+      "kind": "parameter",
+      "status": "removed",
+      "since": "v3",
+      "replacement": "Authorization: Bearer",
+      "pattern": "[?&]api_key=|[\\\"']api_key[\\\"']\\s*:",
+      "note": "v3 only accepts the key as a bearer token; the query parameter returns 401."
+    },
+    {
+      "symbol": "X-Ledgerline-Signature",
+      "kind": "header",
+      "status": "replaced",
+      "since": "v3",
+      "replacement": "Ledgerline-Signature",
+      "pattern": "X-Ledgerline-Signature",
+      "note": "New header format t=<ts>,v1=<sig>, signed over '<t>.<body>'."
+    },
+    {
+      "symbol": "POST /v2/webhooks",
+      "kind": "endpoint",
+      "status": "deprecated",
+      "since": "v3",
+      "replacement": "POST /v3/webhook_endpoints",
+      "pattern": "/v2/webhooks\\b",
+      "note": "Register webhook endpoints; the events field is renamed enabled_events."
+    },
+    {
+      "symbol": "events",
+      "kind": "parameter",
+      "status": "renamed",
+      "since": "v3",
+      "replacement": "enabled_events",
+      "pattern": "[\\\"']events[\\\"']\\s*:",
+      "note": "Field renamed on webhook endpoint registration."
+    },
+    {
+      "symbol": "charge.succeeded",
+      "kind": "event",
+      "status": "renamed",
+      "since": "v3",
+      "replacement": "payment_intent.succeeded",
+      "pattern": "\\bcharge\\.succeeded\\b",
+      "note": "Event names follow the payment intent object."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# judge_v0 - the judge as it was BEFORE the assertion split. Kept for the record; never run.
+# Five criteria, four of which a parser / spec lookup / changelog scan can check for free.
+# Those four were deleted from the judge and moved to evals/assertions.py:
+#   1 -> code_parses   2 -> endpoints_exist   3 -> version_stated   4 -> deprecations_noted
+
+You are grading an answer from a developer-docs assistant for the Ledgerline payments API.
+Score each criterion PASS or FAIL.
+
+1. The Python code sample is syntactically valid.
+2. Every endpoint path mentioned exists in the OpenAPI spec for its version.
+3. The answer states which API version it targets, and it is the version the developer is on.
+4. No deprecated v2 symbol appears without a note saying what replaces it.
+5. The answer is helpful: it correctly resolves the developer's question.
+
+Reference documentation:
+<<REFERENCE>>
+
+Question: <<QUESTION>>
+Answer:
+<<ANSWER>>

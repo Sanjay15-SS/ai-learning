@@ -1,0 +1,41 @@
+   1/30 FAIL how do i create a charge in v3
+   2/30 ok   we're moving to v3 - what replaces POST /v2/charges?
+   3/30 ok   refund half of a payment, v3
+   4/30 ok   list cards on a customer (current api)
+   5/30 FAIL get customer 2 pages at a time v3
+   6/30 ok   is api_key query param still ok in v3?
+   7/30 ok   webhook signature check v3 python
+   8/30 ok   what header does the v3 webhook signature come in
+   9/30 ok   migrate our v2 refunds code that passes charge=ch_123 to v3
+  10/30 ok   v3: create customer and save their card
+  11/30 ok   how to capture later instead of immediately
+  12/30 ok   what happens if I reuse an idempotency key with a different body
+  13/30 ok   retry strategy for 429 on v3
+  14/30 ok   which errors should I not retry
+  15/30 ok   stay on v2 for now - how do I list a customer's cards?
+  16/30 ok   we're still on v2: paginate customers
+  17/30 ok   delete webhook v3
+  18/30 ok   update customer metadata v3
+  19/30 ok   confirm a payment intent after collecting the card
+  20/30 ok   get a payment intent by id
+  21/30 ok   is there a sandbox for testing
+  22/30 FAIL how do I issue a payout
+  23/30 FAIL does ledgerline support apple pay
+  24/30 ok   list refunds for pi_123
+  25/30 ok   event name for a successful payment in v3
+  26/30 ok   what does requires_capture mean
+  27/30 ok   how long until an uncaptured payment is cancelled
+  28/30 ok   v3 limit param max value
+  29/30 ok   what's the difference between confirm=true and calling /confirm
+  30/30 FAIL we pass source=tok_visa on v3 and get a 400 - why
+trc_edc0147b5b32  endpoints_exist, deprecations_noted      how do i create a charge in v3
+trc_569babb52454  deprecations_noted                       get customer 2 pages at a time v3
+trc_fcc2fd6c22d5  deprecations_noted                       how do I issue a payout
+trc_1953db72edf6  refusal_correct                          does ledgerline support apple pay
+trc_a0d5c724e2ed  endpoints_exist, deprecations_noted      we pass source=tok_visa on v3 and get a 400 - why
+  [v1] answering 1/25 E01
+  [v1] answering 2/25 E02
+  [v1] answering 3/25 E03
+  [v1] answering 4/25 E04
+  [v1] answering 5/25 E05
+  [v1] answering 6/25 E06

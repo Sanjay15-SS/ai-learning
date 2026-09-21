@@ -1,22 +1,21 @@
-"""Mechanical checks on the Week 5 plumbing. Retrieval stubbed, nothing indexed.
+"""Offline checks on the plumbing. A scripted fake stands in for the model, so this
+needs no key and spends nothing. It proves the loop, budgets, token summing, workflow
+shape, assertions and protocol guards behave - it measures nothing about quality.
 
     python3 selftest.py
-
-These are the checks that would otherwise be claims in a report: that redaction
-happens before serialisation, that the writer refuses rather than leaking, that a
-seeded draw is reproducible, that the trace schema holds every field replay needs.
-None of them touch the embedding model or the vector store, so this runs in under a
-second and can be run after any edit.
 """
 import json
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace as NS
 
-import redact
-import trace as tracemod
-from questions import DEMO_SET, DESK_SET
-from sample import draw
+from src import llm
+from src.contract import target_version
+from src.corpus import pages, search
+from src.tools import check_deprecation, get_openapi_spec, match_path, run_tool
+from evals import judge as judgemod
+from evals.assertions import run_assertions, passed
 
 PASS, FAIL = [], []
 
@@ -26,136 +25,165 @@ def check(name, cond, detail=""):
     print(f"  {'ok  ' if cond else 'FAIL'}  {name}" + (f"   {detail}" if detail and not cond else ""))
 
 
-# Stub the corpus vocabulary so no ingest is needed.
-redact.corpus_vocabulary.cache_clear()
-redact.corpus_vocabulary = lambda: frozenset(
-    "water damage backup sump discharge coverage endorsement clause exclusion "
-    "homeowners dwelling fire policy wording ordinance law roof surfacing seepage "
-    "limited increased amount actual cash value definitions amendment home sharing "
-    "business schedule applicability grant conditions exclusions".split())
-redact._is_name_token.__globals__["corpus_vocabulary"] = redact.corpus_vocabulary
+class Fake:
+    """Scripted stand-in for anthropic.Anthropic(). `script` is a list of responses;
+    the last one repeats forever, which is how a model that never stops looks."""
+    def __init__(self, script):
+        self.script, self.calls = list(script), []
+        self.beta = NS(messages=NS(create=self._create))
+
+    def with_options(self, **_):
+        return self
+
+    def _create(self, **kw):
+        self.calls.append(kw)
+        r = self.script.pop(0) if len(self.script) > 1 else self.script[0]
+        return r
 
 
-def fake_trace(question="Burst pipe under HO-0304 ed. 03-24, does E-17 apply?"):
-    return {"schema": 1, "trace_id": tracemod.trace_id("desk", "D001", question),
-            "ts": tracemod.now(), "run": "desk", "qid": "D001", "question": question,
-            "app": {"strategy": "structure_aware", "mode": "hybrid", "top_k": 3,
-                    "candidates": 25, "rrf_k": 60},
-            "policy": {"id": "claims-extractive-v1", "sha": "abcdef123456"},
-            "corpus": {"strategy": "structure_aware", "chunks": 99, "sha": "0123456789ab"},
-            "retrieval": [{"rank": 1, "chunk_id": "structure_aware::HO-0304@03-24::010",
-                           "score": 0.0328, "form_number": "HO-0304", "edition_date": "03-24",
-                           "policy_line": "HO-3", "clause": "Clause 3",
-                           "exclusion_codes": ["E-17"]}],
-            "gates": {"coverage": 1.0, "coverage_floor": 0.55, "missing_terms": [],
-                      "score_floor": 0.35, "best_cosine": None},
-            "outcome": {"refused": False, "gate": "extractive",
-                        "citation": "structure_aware::HO-0304@03-24::010",
-                        "quote": "| E-17 | ...", "answer": "| E-17 | ...", "reason": "ok"},
-            "latency_ms": 12.5}
+def resp(blocks, stop, inp=1000, out=200):
+    return NS(content=blocks, stop_reason=stop, model="claude-opus-5",
+              usage=NS(input_tokens=inp, output_tokens=out,
+                       cache_creation_input_tokens=0, cache_read_input_tokens=0))
 
 
-print("redaction")
-r1, c1 = redact.redact_record({"q": "Rebecca Hollis rang about claim CLM-2024-88431."})
-check("full name removed", "Rebecca" not in r1["q"] and "Hollis" not in r1["q"])
-check("claim number removed", "CLM-2024-88431" not in r1["q"])
-check("redaction counted", c1.get("NAME", 0) >= 1 and c1.get("CLAIM_NO", 0) >= 1)
+def text(t):
+    return NS(type="text", text=t)
 
-r2, _ = redact.redact_record({"a": "Rebecca Hollis called.", "b": "which Rebecca did by draining."})
-check("bare first name swept across fields", "Rebecca" not in r2["b"], r2["b"])
 
-r3, _ = redact.redact_record({"q": "Policy HO-99213 attaches form HO-0304 ed. 03-24, code E-17."})
-check("policy number removed", "HO-99213" not in r3["q"])
-check("form number kept", "HO-0304" in r3["q"])
-check("edition kept", "03-24" in r3["q"])
-check("exclusion code kept", "E-17" in r3["q"])
+def tool(name, inp, i="t1"):
+    return NS(type="tool_use", name=name, input=inp, id=i)
 
-r4, _ = redact.redact_record({"t": "Water Backup and Sump Discharge Coverage"})
-check("policy vocabulary not taken for a name", r4["t"] == "Water Backup and Sump Discharge Coverage", r4["t"])
 
-r5, _ = redact.redact_record({"q": "call (555) 123-4567 or 555.987.6543, mail a@b.co, at 12 Oakfield Road"})
-check("both phone formats removed", "555" not in r5["q"], r5["q"])
-check("email removed", "a@b.co" not in r5["q"])
-check("street address removed", "Oakfield" not in r5["q"])
+GOOD = """API version: v3
+Create a payment intent; the v2 `source` parameter is removed and replaced by payment_method.
 
-r6, _ = redact.redact_record({"q": "Sublimit is $15,000 per occurrence over 14 days, Clause 3."})
-check("money kept", "$15,000" in r6["q"])
-check("day counts kept", "14 days" in r6["q"])
-check("clause reference kept", "Clause 3" in r6["q"])
+```python
+import requests, uuid
+r = requests.post("https://api.ledgerline.example/v3/payment_intents",
+                  headers={"Authorization": "Bearer sk_test", "Idempotency-Key": str(uuid.uuid4())},
+                  json={"amount": 2500, "currency": "usd", "payment_method": "pm_1", "confirm": True})
+```"""
+CASE = {"id": "X", "api_version": "v3", "needs_code": True, "expect_refusal": False,
+        "must_include": ["/v3/payment_intents", "Idempotency-Key"]}
 
-check("nested lists redacted", redact.redact_record(
-    {"l": ["Rebecca Hollis", {"d": "CLM-2024-88431"}]})[0]["l"][1]["d"] == "[CLAIM_NO]")
-check("residual scanner finds what redaction would miss",
-      redact.residual_identifiers("Rebecca Hollis rang") != [])
-check("residual scanner clean on redacted text", redact.residual_identifiers(r1["q"]) == [])
+print("corpus and tools")
+check("14 docs pages load", len(pages()) == 14, len(pages()))
+check("version-scoped search returns only that version",
+      all(p.api_version == "v3" for p in search("create a charge", "v3")))
+check("unscoped search can return v2 for a v3 question (the v1 app's weakness)",
+      any(p.api_version == "v2" for p in search("charge a card", None)))
+check("path with a real id resolves", match_path("/v3/payment_intents/pi_123/capture", "v3")
+      == "/v3/payment_intents/{intent_id}/capture")
+check("invented path does not resolve", match_path("/v3/payment_intents/{id}/refunds", "v3") is None)
+check("spec lookup errors on wrong method", "error" in get_openapi_spec("DELETE", "/v3/refunds", "v3"))
+check("spec lookup returns required header",
+      "Idempotency-Key" in json.dumps(get_openapi_spec("POST", "/v3/payment_intents", "v3")))
+check("deprecation found for an endpoint",
+      check_deprecation("POST /v2/charges", "v3")["replacement"] == "POST /v3/payment_intents")
+check("deprecation found for a bare path",
+      check_deprecation("/v2/customers/{id}/cards", "v3")["status"] == "removed")
+check("current symbol is not deprecated",
+      check_deprecation("POST /v3/refunds", "v3")["status"] == "not deprecated")
+check("tool rejects an api_version outside the enum",
+      "error" in json.loads(run_tool("search_docs", {"query": "x", "api_version": "v4"})))
+check("unknown tool is an error result, not a crash",
+      "error" in json.loads(run_tool("nope", {"api_version": "v3"})))
+check("target version: default v3", target_version("how do I refund") == "v3")
+check("target version: staying on v2", target_version("we're still on v2: paginate") == "v2")
+check("target version: moving to v3", target_version("we are on v2, moving to v3") == "v3")
 
-print("\nwriter")
+print("\nassertions")
+r = run_assertions(CASE, GOOD)
+check("a correct answer passes every assertion", passed(r), r)
+check("missing version line fails", run_assertions(CASE, GOOD.replace("API version: v3", ""))["version_stated"] is False)
+bad_code = GOOD.replace('"confirm": True})', '"confirm": True')
+check("unparseable sample fails", run_assertions(CASE, bad_code)["code_parses"] is False)
+check("invented endpoint fails", run_assertions(CASE, GOOD + "\nThen call /v3/payment_intents/{id}/refunds.")["endpoints_exist"] is False)
+v2code = GOOD.replace("/v3/payment_intents\",", "/v2/charges\",")
+check("v2 path in v3 code fails", run_assertions(CASE, v2code)["no_v2_in_v3_code"] is False)
+nonote = "API version: v3\n```python\nrequests.post(u, data={'source': 'tok_visa'})\n```"
+check("deprecated symbol without a note fails", run_assertions(CASE, nonote)["deprecations_noted"] is False)
+check("deprecated symbol with a note passes", run_assertions(CASE, GOOD)["deprecations_noted"] is True)
+refuse_case = {**CASE, "expect_refusal": True, "must_include": [], "needs_code": False}
+check("correct refusal passes", run_assertions(refuse_case, "API version: v3\nNot covered in the Ledgerline docs.")["refusal_correct"])
+check("a guess where a refusal was due fails", run_assertions(refuse_case, "API version: v3\nUse /v3/payouts.")["refusal_correct"] is False)
+
+print("\nagent loop")
+from week7.agent import Budget, run_agent  # noqa: E402
+fake = Fake([resp([tool("search_docs", {"query": "charge", "api_version": "v3"})], "tool_use", 1000, 100),
+             resp([tool("get_openapi_spec", {"method": "POST", "path": "/v3/payment_intents", "api_version": "v3"}, "t2")], "tool_use", 3000, 100),
+             resp([text(GOOD)], "end_turn", 5000, 400)])
+llm.set_client(fake)
+res = run_agent("charge a card on v3", Budget(), log=lambda s: None)
+check("completes a multi-step task", res["status"] == "done" and res["laps"] == 3, res["status"])
+check("both tool calls executed", [s["tool"] for s in res["steps"]] == ["search_docs", "get_openapi_spec"])
+check("tokens summed over every lap, not just the last",
+      res["usage"]["total_tokens"] == 1100 + 3100 + 5400, res["usage"]["total_tokens"])
+check("cost summed over every lap",
+      abs(res["usage"]["cost_usd"] - ((9000 * 5 + 600 * 25) / 1e6)) < 1e-9, res["usage"]["cost_usd"])
+hist = fake.calls[-1]["messages"]
+check("each tool result goes back with its matching tool_use_id",
+      [hist[2]["content"][0]["tool_use_id"], hist[4]["content"][0]["tool_use_id"]] == ["t1", "t2"])
+check("whole history is re-sent each lap", len(fake.calls[2]["messages"]) == 5)
+check("refusal fallback requested on every call",
+      all(c.get("fallbacks") == "default" for c in fake.calls))
+
+spin = lambda: Fake([resp([tool("search_docs", {"query": "x", "api_version": "v3"})], "tool_use", 1000, 100)])
+for label, budget, want in [
+        ("max_iters", Budget(max_iters=3), "budget:max_iters"),
+        ("max_tokens", Budget(max_tokens=5000), "budget:max_tokens"),
+        ("max_cost", Budget(max_cost_usd=0.012), "budget:max_cost"),
+        ("max_wall", Budget(max_wall_s=0.0), "budget:max_wall")]:
+    llm.set_client(spin())
+    lines = []
+    res = run_agent("loop forever", budget, log=lines.append)
+    check(f"{label} budget stops a model that never stops", res["status"] == want,
+          f"{res['status']} after {res['laps']} laps")
+    check(f"{label} termination is logged with the budget's name",
+          any(l.startswith("[stop] budget fired: " + label) for l in lines))
+
+llm.set_client(Fake([resp([tool("search_docs", {"query": "x", "api_version": "v3"})], "max_tokens")]))
+res = run_agent("q", Budget(), log=lambda s: None)
+check("a tool call cut off by max_tokens is not executed", res["status"] == "truncated" and not res["steps"])
+
+print("\nworkflow")
+from week7.workflow import pick_endpoint, run_workflow  # noqa: E402
+fake = Fake([resp([text(GOOD)], "end_turn", 4000, 400)])
+llm.set_client(fake)
+res = run_workflow("We call POST /v2/charges with source. Give me v3.", log=lambda s: None)
+check("exactly one model call, no loop", len(fake.calls) == 1 and res["laps"] == 1)
+check("workflow gives the model no tools", "tools" not in fake.calls[0])
+check("step 3 result reaches the writer",
+      "POST /v3/payment_intents" in fake.calls[0]["messages"][0]["content"])
+check("endpoint taken from the question", pick_endpoint("port GET /v2/charges/{charge_id}", {"results": []})
+      == ("GET", "/v2/charges/{charge_id}"))
+check("same system contract as the agent",
+      sys.modules["week7.agent"].SYSTEM.split("Answer format")[1] == sys.modules["week7.workflow"].SYSTEM.split("Answer format")[1])
+
+print("\njudge and blind protocol")
+from week6 import judge_eval  # noqa: E402
+from evals.common import LABELS  # noqa: E402
 with tempfile.TemporaryDirectory() as d:
-    p = Path(d) / "t.jsonl"
-    w = tracemod.TraceWriter(p, "desk")
-    rec = fake_trace()
-    rec["question"] = "Rebecca Hollis, claim CLM-2024-88431, burst pipe."
-    clean = w.write(rec)
-    on_disk = p.read_text(encoding="utf-8")
-    check("one line per question", on_disk.count("\n") == 1)
-    check("line is valid json", json.loads(on_disk.splitlines()[0])["trace_id"] == rec["trace_id"])
-    check("no identifier in the bytes on disk", redact.residual_identifiers(on_disk) == [])
-    check("no identifier in the returned record", "Rebecca" not in json.dumps(clean))
-    check("redaction summary attached", clean["redaction"]["total"] >= 2)
-
-    w.write(fake_trace("second question about E-18"))
-    check("appends rather than truncates", p.read_text(encoding="utf-8").count("\n") == 2)
-
-    # Break the name pattern on purpose: the writer must refuse, not write.
-    bad = fake_trace()
-    bad["outcome"]["reason"] = "contact Dana Whitfield"
-    before = p.read_text(encoding="utf-8")
-    saved = redact.FULL_NAME
+    judgemod.CACHE = Path(d) / "cache.jsonl"
+    llm.set_client(Fake([resp([text("The answer uses v2.\nVERDICT: FAIL")], "end_turn")]))
+    j = judgemod.judge("v1", {"id": "E01", "api_version": "v3", "question": "q"}, "a")
+    check("judge verdict parsed from the last line", j["verdict"] == "FAIL")
+    llm.set_client(Fake([resp([text("VERDICT: PASS")], "end_turn")]))
+    j2 = judgemod.judge("v1", {"id": "E01", "api_version": "v3", "question": "q"}, "a")
+    check("judge verdict is cached per answer", j2["verdict"] == "FAIL")
+    sysblk, user = judgemod.render("v1", {"id": "E01", "api_version": "v3", "question": "QQ"}, "AA")
+    check("reference docs sit in the cached system block",
+          "cache_control" in sysblk[0] and "Payment intents (v3)" in sysblk[0]["text"])
+    check("judge_v1 grades one criterion, not the four moved to code",
+          "CORRECT_AND_USABLE" in sysblk[0]["text"] and "1. The Python code sample" not in sysblk[0]["text"])
+if not LABELS.exists():
     try:
-        redact.FULL_NAME = __import__("re").compile(r"(?!x)x")
-        try:
-            w.write(bad)
-            raised = False
-        except ValueError:
-            raised = True
-    finally:
-        redact.FULL_NAME = saved
-    check("writer raises when an identifier would survive", raised)
-    check("nothing written when the writer raises", p.read_text(encoding="utf-8") == before)
-
-print("\ntrace ids and schema")
-check("trace id is deterministic",
-      tracemod.trace_id("desk", "D001", "q") == tracemod.trace_id("desk", "D001", "q"))
-check("trace id changes with the question",
-      tracemod.trace_id("desk", "D001", "q") != tracemod.trace_id("desk", "D001", "q2"))
-check("trace id changes with the run",
-      tracemod.trace_id("desk", "D001", "q") != tracemod.trace_id("demo", "D001", "q"))
-t = fake_trace()
-need = ["trace_id", "run", "qid", "question", "app", "policy", "corpus", "retrieval",
-        "gates", "outcome", "latency_ms"]
-check("schema carries every top-level field replay needs", all(k in t for k in need))
-check("retrieval rows carry chunk_id and score",
-      all({"rank", "chunk_id", "score"} <= set(r) for r in t["retrieval"]))
-check("policy is pinned by id and sha", set(t["policy"]) == {"id", "sha"})
-check("corpus is pinned by sha and count", {"sha", "chunks"} <= set(t["corpus"]))
-
-print("\nsampling")
-fake = [fake_trace(f"question {i}") for i in range(117)]
-for i, f in enumerate(fake):
-    f["trace_id"] = f"trc_{i:012d}"
-a = [t["trace_id"] for t in draw(fake, 20250907, 20)]
-b = [t["trace_id"] for t in draw(list(reversed(fake)), 20250907, 20)]
-check("draw is reproducible", a == [t["trace_id"] for t in draw(fake, 20250907, 20)])
-check("draw ignores file order", a == b)
-check("draw returns n distinct traces", len(set(a)) == 20)
-check("a different seed draws differently", a != [t["trace_id"] for t in draw(fake, 1, 20)])
-check("replay pick is a single trace", len(draw(fake, 20250908, 1)) == 1)
-
-print("\nquestion set")
-check("117 desk questions", len(DESK_SET) == 117)
-check("10 demo questions", len(DEMO_SET) == 10)
-check("no duplicate desk question", len({q for _, q in DESK_SET}) == 117)
-check("no expected answers recorded", all(len(row) == 2 for row in DESK_SET + DEMO_SET))
+        judge_eval._labels()
+        blocked = False
+    except SystemExit:
+        blocked = True
+    check("judge refuses to run before labels_25.json exists", blocked)
 
 print(f"\n{len(PASS)}/{len(PASS) + len(FAIL)} checks passed")
 if FAIL:

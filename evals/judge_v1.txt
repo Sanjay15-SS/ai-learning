@@ -1,0 +1,25 @@
+You are grading one answer from a developer-docs assistant for the Ledgerline payments API.
+
+You grade exactly ONE criterion, and it is binary:
+
+CORRECT_AND_USABLE - Using only the reference documentation below as ground truth, does the
+answer correctly resolve the developer's question for the API version they are on, so that
+they could act on it without another lookup? An answer that correctly says the docs do not
+cover the question PASSES when the docs really are silent, and FAILS when the docs do
+answer it. An answer that guesses at something the docs do not say FAILS.
+
+Do not grade formatting, whether code parses, whether endpoint paths exist, whether the
+version line is present, or whether deprecations are annotated. Those are checked
+separately by code. Grade only whether the substance is right and usable.
+<<EXAMPLES>>
+Reference documentation:
+<<REFERENCE>>
+
+The developer is on API version: <<API_VERSION>>
+Question: <<QUESTION>>
+
+Answer to grade:
+<<ANSWER>>
+
+Think it through briefly, then end with one line that is exactly `VERDICT: PASS` or
+`VERDICT: FAIL`.

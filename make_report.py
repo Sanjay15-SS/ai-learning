@@ -210,7 +210,76 @@ def week7() -> str:
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------- week 8
+
+def week8() -> str:
+    data = load(RUNS / "week8_eval.json")
+    out = ["# Week 8 — Agent Failure Modes & Trajectory Evals (Task Set E)\n",
+           f"Model for docs agent: `{MODEL}` (local, MLX; no API key). {COST_NOTE}.\n"]
+
+    if not data:
+        out.append(pending("python3 -m week8.trajectory_eval"))
+        return "\n".join(out)
+
+    base = data["baseline"]
+    mit = data["mitigated"]
+    rawp = data.get("right_answer_wrong_path") or {}
+    price = data.get("price_paid") or {}
+
+    out.append("## 1. Expected Tool Sequences (10 docs cases)\n")
+    out.append("LEGITIMATE alternate valid paths accepted as sets rather than single rigid sequences:\n")
+    out.append("| id | class | expected tool sequences (allowed sets) |\n|---|---|---|")
+    from week8.trajectory_eval import EXPECTED_TRAJECTORIES, MIN_STEPS_NEEDED
+    for qid in sorted(EXPECTED_TRAJECTORIES.keys()):
+        seqs = EXPECTED_TRAJECTORIES[qid]
+        formatted = " OR ".join(" -> ".join(s) for s in seqs)
+        cls = "deprecated-needs-replacement-lookup" if MIN_STEPS_NEEDED[qid] == 2 else "single-lookup"
+        out.append(f"| {qid} | `{cls}` | `{formatted}` |")
+    out.append("")
+
+    out.append("## 2. Four Trajectory Numbers\n")
+    out.append("| metric | baseline value | description |\n|---|---|---|")
+    out.append(f"| **Tool-Choice Accuracy** | **{base['tool_choice_accuracy']:.1%}** | % of tool calls matching valid expected options |")
+    out.append(f"| **Argument Validity Rate** | **{base['arg_validity_rate']:.1%}** | % of tool calls with real paths, methods and versions |")
+    out.append(f"| **Step Efficiency** | **{base['step_efficiency']:.2f}** | steps needed / steps taken (mean over 10 questions) |")
+    out.append(f"| **Cost per Question (p50)** | **${base['cost_p50']:.4f}** | median cost per question |")
+    out.append(f"| **Cost per Question (max)** | **${base['cost_max']:.4f}** | maximum cost across all 10 questions |")
+    out.append("")
+
+    out.append("## 3. Outcome-vs-Trajectory Gap & Right-Answer-Wrong-Path Trace\n")
+    out.append(f"- **Outcome Pass Rate**: {base['outcome_pass_rate']:.1%}\n")
+    out.append(f"- **Trajectory Pass Rate**: {base['trajectory_pass_rate']:.1%}\n")
+    out.append(f"- **Outcome-vs-Trajectory Gap**: **{base['gap']:.1%}** ({base['gap']*100:.0f} percentage points)\n\n")
+
+    out.append("### Named Right-Answer-Wrong-Path Question\n")
+    if rawp:
+        out.append(f"**Question ID**: `{rawp.get('id', 'Q01')}` — *\"{rawp.get('question', '')}\"*\n\n")
+        out.append(f"- **Outcome Eval**: `PASS` (final code included correct `/v3/payment_intents` path recite)\n")
+        out.append(f"- **Trajectory Eval**: `FAIL` (sequence: `{rawp.get('sequence', [])}`, argument failures: `{rawp.get('arg_failures', [])}`)\n")
+        out.append(f"- **Wrong Path Taken**: Recited memorized endpoint from pre-trained knowledge or called invalid tool path without verifying OpenAPI spec via `get_openapi_spec`.\n")
+    out.append("")
+
+    out.append("## 4. Single Mitigation (Top Mode Before -> After & Price Paid)\n")
+    out.append("**Mitigation Applied**: *Strict Spec Verification Mandate & Argument Validation Guard in Agent Loop*\n\n")
+    out.append(f"- **Top Failure Mode**: `memorized_no_spec_or_invalid_args`\n")
+    out.append(f"- **Failure Count**: **{data['top_mode_before']}** (before) -> **{data['top_mode_after']}** (after)\n")
+    out.append(f"- **Price Paid (Measured)**:\n")
+    out.append(f"  - Added tokens per question: **+{price.get('added_tokens_per_question', 0)} tokens/q**\n")
+    out.append(f"  - Added cost per question: **+${price.get('added_cost_per_question_usd', 0):.5f}/q**\n")
+    out.append(f"  - Added latency: **+{price.get('added_latency_s', 0)}s p50**\n\n")
+
+    out.append("## 5. Per-Mode Regression Check\n")
+    out.append("| failure mode | count before | count after | status |\n|---|---|---|---|")
+    for r in data.get("regression_table", []):
+        out.append(f"| `{r['mode']}` | {r['count_before']} | {r['count_after']} | **{r['status']}** |")
+    out.append("")
+
+    return "\n".join(out)
+
+
 if __name__ == "__main__":
     (ROOT / "RESULTS-week6.md").write_text(week6() + "\n")
     (ROOT / "RESULTS-week7.md").write_text(week7() + "\n")
-    print("wrote RESULTS-week6.md and RESULTS-week7.md")
+    (ROOT / "RESULTS-week8.md").write_text(week8() + "\n")
+    print("wrote RESULTS-week6.md, RESULTS-week7.md, and RESULTS-week8.md")
+

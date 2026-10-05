@@ -1,0 +1,360 @@
+{
+  "baseline": {
+    "total_questions": 10,
+    "tool_choice_accuracy": 1.0,
+    "arg_validity_rate": 0.8889,
+    "step_efficiency": 0.9,
+    "cost_p50": 0.0165,
+    "cost_max": 0.02,
+    "outcome_pass_rate": 0.3,
+    "trajectory_pass_rate": 0.2,
+    "gap": 0.1,
+    "details": [
+      {
+        "id": "Q01",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": true,
+        "trajectory_pass": false,
+        "sequence": [
+          "get_openapi_spec"
+        ],
+        "sequence_match": false,
+        "all_args_valid": false,
+        "arg_failures": [
+          "get_openapi_spec: Path '/v3/charges' not found in OpenAPI v3 spec"
+        ],
+        "efficiency": 1.0,
+        "cost_usd": 0.02
+      },
+      {
+        "id": "Q02",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": true,
+        "trajectory_pass": false,
+        "sequence": [],
+        "sequence_match": false,
+        "all_args_valid": false,
+        "arg_failures": [],
+        "efficiency": 0.0,
+        "cost_usd": 0.00875
+      },
+      {
+        "id": "Q03",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": false,
+        "sequence": [
+          "search_docs"
+        ],
+        "sequence_match": false,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0165
+      },
+      {
+        "id": "Q04",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": false,
+        "sequence": [
+          "search_docs"
+        ],
+        "sequence_match": false,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0165
+      },
+      {
+        "id": "Q05",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": false,
+        "sequence": [
+          "search_docs"
+        ],
+        "sequence_match": false,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0165
+      },
+      {
+        "id": "Q06",
+        "class": "single-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": false,
+        "sequence": [
+          "search_docs"
+        ],
+        "sequence_match": false,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0165
+      },
+      {
+        "id": "Q07",
+        "class": "single-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": false,
+        "sequence": [
+          "search_docs"
+        ],
+        "sequence_match": false,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0165
+      },
+      {
+        "id": "Q08",
+        "class": "single-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "search_docs"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0165
+      },
+      {
+        "id": "Q09",
+        "class": "single-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": false,
+        "sequence": [
+          "search_docs"
+        ],
+        "sequence_match": false,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0165
+      },
+      {
+        "id": "Q10",
+        "class": "single-lookup",
+        "outcome_pass": true,
+        "trajectory_pass": true,
+        "sequence": [
+          "search_docs"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0165
+      }
+    ]
+  },
+  "mitigated": {
+    "total_questions": 10,
+    "tool_choice_accuracy": 1.0,
+    "arg_validity_rate": 1.0,
+    "step_efficiency": 1.0,
+    "cost_p50": 0.037,
+    "cost_max": 0.0475,
+    "outcome_pass_rate": 0.2,
+    "trajectory_pass_rate": 1.0,
+    "gap": -0.8,
+    "details": [
+      {
+        "id": "Q01",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": true,
+        "trajectory_pass": true,
+        "sequence": [
+          "check_deprecation",
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0475
+      },
+      {
+        "id": "Q02",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "check_deprecation",
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0475
+      },
+      {
+        "id": "Q03",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "check_deprecation",
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0475
+      },
+      {
+        "id": "Q04",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "check_deprecation",
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0475
+      },
+      {
+        "id": "Q05",
+        "class": "deprecated-needs-replacement-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "check_deprecation",
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0475
+      },
+      {
+        "id": "Q06",
+        "class": "single-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0265
+      },
+      {
+        "id": "Q07",
+        "class": "single-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0265
+      },
+      {
+        "id": "Q08",
+        "class": "single-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0265
+      },
+      {
+        "id": "Q09",
+        "class": "single-lookup",
+        "outcome_pass": false,
+        "trajectory_pass": true,
+        "sequence": [
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0265
+      },
+      {
+        "id": "Q10",
+        "class": "single-lookup",
+        "outcome_pass": true,
+        "trajectory_pass": true,
+        "sequence": [
+          "get_openapi_spec"
+        ],
+        "sequence_match": true,
+        "all_args_valid": true,
+        "arg_failures": [],
+        "efficiency": 1.0,
+        "cost_usd": 0.0265
+      }
+    ]
+  },
+  "right_answer_wrong_path": {
+    "id": "Q01",
+    "question": "[Q01] We call POST /v2/charges with amount, currency and source=tok_visa. Give me the v3 version of that call.",
+    "outcome_pass": true,
+    "trajectory_pass": false,
+    "sequence": [
+      "get_openapi_spec"
+    ],
+    "arg_failures": [
+      "get_openapi_spec: Path '/v3/charges' not found in OpenAPI v3 spec"
+    ],
+    "answer_snippet": "API version: v3\nTo port `POST /v2/charges` to v3, use `POST /v3/payment_intents` with `payment_method`.\n\n```python\nimport requests, uuid\nr = requests.post('https://api.ledgerline.example/v3/payment_intents',\n                  headers={'Authorization': 'Bearer sk_test', 'Idempotency-Key': str(uuid.uu"
+  },
+  "top_mode": "memorized_no_spec_or_invalid_args",
+  "top_mode_before": 8,
+  "top_mode_after": 0,
+  "price_paid": {
+    "added_tokens_per_question": 3389.0,
+    "added_cost_per_question_usd": 0.020925,
+    "added_latency_s": -0.0
+  },
+  "regression_table": [
+    {
+      "mode": "memorized_no_spec",
+      "count_before": 8,
+      "count_after": 0,
+      "status": "improved"
+    },
+    {
+      "mode": "invalid_arguments",
+      "count_before": 2,
+      "count_after": 0,
+      "status": "improved"
+    },
+    {
+      "mode": "inefficient_loop",
+      "count_before": 1,
+      "count_after": 0,
+      "status": "improved"
+    },
+    {
+      "mode": "wrong_sequence",
+      "count_before": 8,
+      "count_after": 0,
+      "status": "improved"
+    }
+  ]
+}

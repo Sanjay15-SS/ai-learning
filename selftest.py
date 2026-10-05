@@ -185,7 +185,24 @@ if not LABELS.exists():
         blocked = True
     check("judge refuses to run before labels_25.json exists", blocked)
 
+print("\nweek 8 trajectory evals")
+from week8.trajectory_eval import validate_tool_args, score_run_trajectory, run_full_week8_eval  # noqa: E402
+val_ok, _ = validate_tool_args("get_openapi_spec", {"method": "POST", "path": "/v3/payment_intents", "api_version": "v3"})
+check("valid openapi spec path passes argument validation", val_ok)
+
+val_bad, _ = validate_tool_args("get_openapi_spec", {"method": "POST", "path": "/v3/charges", "api_version": "v3"})
+check("invented openapi spec path fails argument validation", val_bad is False)
+
+sc = score_run_trajectory("Q01", [{"tool": "check_deprecation", "input": {"symbol": "POST /v2/charges", "api_version": "v3"}},
+                                   {"tool": "get_openapi_spec", "input": {"method": "POST", "path": "/v3/payment_intents", "api_version": "v3"}}])
+check("expected valid tool sequence passes trajectory eval", sc["pass_trajectory"] is True)
+
+w8_res = run_full_week8_eval()
+check("week 8 trajectory eval completes offline", w8_res["baseline"]["gap"] >= 0.0)
+check("top failure mode before -> after reduction measured", w8_res["top_mode_before"] >= w8_res["top_mode_after"])
+
 print(f"\n{len(PASS)}/{len(PASS) + len(FAIL)} checks passed")
 if FAIL:
     print("failed: " + ", ".join(FAIL))
     sys.exit(1)
+

@@ -329,7 +329,7 @@
   "price_paid": {
     "added_tokens_per_question": 3389.0,
     "added_cost_per_question_usd": 0.020925,
-    "added_latency_s": -0.0
+    "added_latency_s": 0.0
   },
   "regression_table": [
     {

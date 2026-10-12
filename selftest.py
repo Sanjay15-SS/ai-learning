@@ -201,6 +201,34 @@ w8_res = run_full_week8_eval()
 check("week 8 trajectory eval completes offline", w8_res["baseline"]["gap"] >= 0.0)
 check("top failure mode before -> after reduction measured", w8_res["top_mode_before"] >= w8_res["top_mode_after"])
 
+print("\nweek 9 mcp discovery and server extension")
+from week9.run_task import get_tool_discovery_counts, generate_agent_and_config_diffs, capture_annotated_wire, generate_risk_note, run_query_trace  # noqa: E402
+from week9.docs_server import recoverable_get_openapi_spec, unrecoverable_get_openapi_spec  # noqa: E402
+
+t_before, t_after = get_tool_discovery_counts()
+check("server 1 alone discovers 3 tools", len(t_before) == 3 and "search_docs" in t_before, len(t_before))
+check("server 1 plus 2 discovers 6 tools without agent code change", len(t_after) == 6 and "get_package_version_metadata" in t_after, len(t_after))
+
+a_diff, c_diff = generate_agent_and_config_diffs()
+check("agent_diff.txt has ZERO changed lines", len(a_diff.strip()) == 0, len(a_diff.strip()))
+check("config_diff.txt shows package-registry server added", "package-registry" in c_diff)
+
+q_trace = run_query_trace()
+check("agent provably calls package-registry tool in trace", "get_package_version_metadata" in q_trace["tools_called"])
+check("trace records package-registry server as provider", "package-registry" in q_trace["servers_invoked"])
+
+rec_res = recoverable_get_openapi_spec("POST", "/v4/charges", "v4")
+check("recoverable error path returns latest published version and guidance", "v3.2" in rec_res.get("latest_published_version", "") and "recovery_hint" in rec_res)
+unrec_res = unrecoverable_get_openapi_spec("POST", "/v4/charges", "v4")
+check("unrecoverable old error returns cryptic error without recovery", "Error 3" in unrec_res.get("error", ""))
+
+r_lines = generate_risk_note().strip().splitlines()
+check("risk_note.md is exactly 5 lines", len(r_lines) == 5, len(r_lines))
+
+wire_data = capture_annotated_wire()
+check("wire.json has annotated initialize, tools/list, and tools/call", len(wire_data["exchanges"]) == 7)
+check("wire.json explicitly documents model-call location boundary", "model_call_location_statement" in wire_data["metadata"])
+
 print(f"\n{len(PASS)}/{len(PASS) + len(FAIL)} checks passed")
 if FAIL:
     print("failed: " + ", ".join(FAIL))

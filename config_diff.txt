@@ -1,0 +1,13 @@
+--- week9/config_server1.json
++++ week9/config_server1_plus_2.json
+@@ -3,6 +3,10 @@
+     "docs-search": {
+       "command": "python",
+       "args": ["-m", "week9.docs_server"]
++    },
++    "package-registry": {
++      "command": "python",
++      "args": ["-m", "week9.registry_server"]
+     }
+   }
+ }

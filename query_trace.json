@@ -1,0 +1,30 @@
+{
+  "question": "What is the latest published version of ledgerline-python?",
+  "tools_called": [
+    "get_package_version_metadata"
+  ],
+  "servers_invoked": [
+    "package-registry"
+  ],
+  "steps": [
+    {
+      "lap": 1,
+      "server": "package-registry",
+      "tool": "get_package_version_metadata",
+      "input": {
+        "package_name": "ledgerline-python"
+      },
+      "output_chars": 334,
+      "is_error": false
+    }
+  ],
+  "answer": "The latest published version of ledgerline-python is 3.2.0.",
+  "trace_logs": [
+    "[start] What is the latest published version of ledgerline-python?",
+    "[mcp] Discovered 6 tools from 2 server(s): ['search_docs', 'get_openapi_spec', 'check_deprecation', 'get_package_version_metadata', 'get_package_release_dates', 'get_package_deprecation_notices']",
+    "[lap 1] stop_reason=tool_use tool_calls=1 in=1200 out=150 | total 1,350 tok $0.0097 0.2s",
+    "    -> [package-registry] get_package_version_metadata({\"package_name\": \"ledgerline-python\"}) => {\n  \"package_name\": \"ledgerline-python\",\n  \"latest_version\": \"3.2.0\",\n  \"description\": \"Ledgerline Python Client Package (alias to ledgerlin...",
+    "[lap 2] stop_reason=end_turn tool_calls=0 in=1200 out=150 | total 2,700 tok $0.0195 0.2s",
+    "[end] status=done laps=2 tools=1 tokens=2,700 cost=$0.0195 latency=0.2s"
+  ]
+}

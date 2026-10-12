@@ -1,0 +1,205 @@
+{
+  "metadata": {
+    "title": "Raw JSON-RPC MCP Wire Trace \u2014 package-registry server",
+    "server_target": "package-registry",
+    "transport": "stdio (newline-delimited JSON-RPC 2.0)",
+    "protocol_version": "2024-11-05",
+    "model_call_location_statement": "The model call happens ONLY inside the host agent between tools/list (when discovered tool schemas are provided to the LLM) and tools/call (when the LLM selects a tool); the MCP server is a standalone deterministic JSON-RPC process that NEVER calls an LLM."
+  },
+  "exchanges": [
+    {
+      "step": 1,
+      "phase": "initialize_request",
+      "direction": "agent_to_server",
+      "raw_message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2024-11-05",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "ledgerline-docs-assistant",
+            "version": "1.0.0"
+          }
+        }
+      },
+      "annotations": {
+        "jsonrpc": "JSON-RPC specification version, strictly '2.0'.",
+        "id": "Client-allocated correlation ID (integer 1) matching this request to its response.",
+        "method": "MCP lifecycle method 'initialize' initiating capability handshake.",
+        "params": "Object containing client protocol version ('2024-11-05'), client capabilities, and clientInfo metadata."
+      }
+    },
+    {
+      "step": 2,
+      "phase": "initialize_response",
+      "direction": "server_to_agent",
+      "raw_message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "protocolVersion": "2024-11-05",
+          "capabilities": {
+            "tools": {
+              "listChanged": false
+            }
+          },
+          "serverInfo": {
+            "name": "package-registry",
+            "version": "1.0.0"
+          }
+        }
+      },
+      "annotations": {
+        "jsonrpc": "JSON-RPC specification version, strictly '2.0'.",
+        "id": "Correlation ID (1) confirming this response matches initialize request #1.",
+        "result": "Payload containing server protocolVersion ('2024-11-05'), server capabilities (tools list support), and serverInfo ('package-registry' v1.0.0)."
+      }
+    },
+    {
+      "step": 3,
+      "phase": "initialized_notification",
+      "direction": "agent_to_server",
+      "raw_message": {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+      },
+      "annotations": {
+        "jsonrpc": "JSON-RPC specification version, strictly '2.0'.",
+        "method": "MCP lifecycle notification 'notifications/initialized' signaling handshake completion.",
+        "id": "Absent (strictly null/omitted) because JSON-RPC notifications expect no response."
+      }
+    },
+    {
+      "step": 4,
+      "phase": "tools_list_request",
+      "direction": "agent_to_server",
+      "raw_message": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list"
+      },
+      "annotations": {
+        "jsonrpc": "JSON-RPC specification version, strictly '2.0'.",
+        "id": "Client correlation ID (integer 2) for the tools discovery request.",
+        "method": "MCP method 'tools/list' querying all tools exposed by this server."
+      }
+    },
+    {
+      "step": 5,
+      "phase": "tools_list_response",
+      "direction": "server_to_agent",
+      "raw_message": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "tools": [
+            {
+              "name": "get_package_version_metadata",
+              "description": "Retrieve package metadata, latest published version, dependencies, license, and runtime requirements from DevRel's package registry.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "package_name": {
+                    "type": "string",
+                    "description": "Name of the package, e.g. 'ledgerline' or 'ledgerline-python'"
+                  }
+                },
+                "required": [
+                  "package_name"
+                ]
+              }
+            },
+            {
+              "name": "get_package_release_dates",
+              "description": "Retrieve the complete release history timeline and publication dates for all versions of a package from the registry.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "package_name": {
+                    "type": "string",
+                    "description": "Name of the package"
+                  }
+                },
+                "required": [
+                  "package_name"
+                ]
+              }
+            },
+            {
+              "name": "get_package_deprecation_notices",
+              "description": "Query official deprecation warnings, sunset timelines, and migration paths for specific package versions in DevRel's package registry.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "package_name": {
+                    "type": "string",
+                    "description": "Name of the package"
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Optional version string to inspect"
+                  }
+                },
+                "required": [
+                  "package_name"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "annotations": {
+        "jsonrpc": "JSON-RPC specification version, strictly '2.0'.",
+        "id": "Correlation ID (2) matching tools/list request.",
+        "result": "Object containing 'tools' array: list of tool definitions with name, description, and inputSchema conforming to JSON Schema."
+      }
+    },
+    {
+      "step": 6,
+      "phase": "tools_call_request",
+      "direction": "agent_to_server",
+      "raw_message": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "get_package_version_metadata",
+          "arguments": {
+            "package_name": "ledgerline-python"
+          }
+        }
+      },
+      "annotations": {
+        "jsonrpc": "JSON-RPC specification version, strictly '2.0'.",
+        "id": "Client correlation ID (integer 3) for tool execution.",
+        "method": "MCP method 'tools/call' requesting tool invocation.",
+        "params": "Object specifying 'name' ('get_package_version_metadata') and 'arguments' ({'package_name': 'ledgerline-python'})."
+      }
+    },
+    {
+      "step": 7,
+      "phase": "tools_call_response",
+      "direction": "server_to_agent",
+      "raw_message": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"package_name\": \"ledgerline-python\",\n  \"latest_version\": \"3.2.0\",\n  \"description\": \"Ledgerline Python Client Package (alias to ledgerline)\",\n  \"homepage\": \"https://ledgerline.example/docs/sdk/python\",\n  \"license\": \"MIT\",\n  \"python_requires\": \">=3.9\",\n  \"dependencies\": {\n    \"requests\": \">=2.28.0\",\n    \"urllib3\": \">=1.26.0\"\n  }\n}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "annotations": {
+        "jsonrpc": "JSON-RPC specification version, strictly '2.0'.",
+        "id": "Correlation ID (3) matching tools/call invocation.",
+        "result": "Object containing 'content' array with text/image items, and boolean 'isError' (false for successful execution)."
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "docs-search": {
+      "command": "python",
+      "args": ["-m", "week9.docs_server"]
+    },
+    "package-registry": {
+      "command": "python",
+      "args": ["-m", "week9.registry_server"]
+    }
+  }
+}

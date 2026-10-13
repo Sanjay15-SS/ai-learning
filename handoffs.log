@@ -1,0 +1,38 @@
+# Hand-Off Event Log — Per-Hop Token & Cost Audit
+# Total Hand-off Events: 30
+# Multi-Agent Total Tokens: 54,000 | Single Agent: 22,300
+# Re-Send Multiplier: 2.4x
+# Dominant Hand-off: orchestrator -> code_worker resend, 40.2% of all tokens
+
+| Event # | Sender | Receiver | Intent | Input Tokens | Output Tokens | Total Tokens | Cost (USD) | Status |
+| :---: | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 1 | orchestrator | version_worker | version_and_deprecation_lookup | 950 | 110 | 1,060 | $0.0075 | ok |
+| 2 | orchestrator | code_worker | code_sample_generation | 1,950 | 220 | 2,170 | $0.0152 | ok |
+| 3 | workers | orchestrator_synthesis | final_synthesis_and_contract_formatting | 1,950 | 220 | 2,170 | $0.0152 | ok |

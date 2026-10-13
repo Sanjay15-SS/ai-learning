@@ -229,6 +229,33 @@ wire_data = capture_annotated_wire()
 check("wire.json has annotated initialize, tools/list, and tools/call", len(wire_data["exchanges"]) == 7)
 check("wire.json explicitly documents model-call location boundary", "model_call_location_statement" in wire_data["metadata"])
 
+print("\nweek 10 multi-agent squad & race evals")
+from src import ROOT  # noqa: E402
+from week10.race import load_10_cases, run_race_eval  # noqa: E402
+from week10.run_task import run_full_week10  # noqa: E402
+
+cases10 = load_10_cases()
+check("evaluates exact 10 Week-6 cases (E01-E10)", len(cases10) == 10 and cases10[0]["id"] == "E01" and cases10[-1]["id"] == "E10")
+
+w10_res = run_full_week10()
+check("four numbers reported for both arms: pass rate, p50/p99 latency, tokens, cost",
+      "pass_rate" in w10_res["single_metrics"] and "p50_latency" in w10_res["multi_metrics"] and
+      "p99_latency" in w10_res["multi_metrics"] and w10_res["multi_metrics"]["total_tokens"] > 0 and
+      w10_res["multi_metrics"]["cost_per_q"] > 0)
+
+check("context re-send multiplier computed (multi / single)", w10_res["multiplier"] >= 2.0, w10_res["multiplier"])
+check("single largest token share attributed to named hand-off", "code_worker resend" in w10_res["dominant_handoff"])
+
+check("worker 500 failure injected and actual behavior recorded", "degraded" in w10_res["failure_behavior"])
+
+v_file = (ROOT / "verdict.md").read_text(encoding="utf-8").strip().splitlines()
+check("verdict.md is max 10 lines", len(v_file) <= 10, len(v_file))
+check("verdict explicitly names sunk-cost bias out loud", any("sunk-cost" in line.lower() for line in v_file))
+check("verdict cites key metrics and issues KILL verdict", any("kill" in line.lower() for line in v_file) and any("token" in line.lower() for line in v_file))
+
+h_log = (ROOT / "handoffs.log").read_text(encoding="utf-8")
+check("handoffs.log records per-hand-off token counts", "code_sample_generation" in h_log and "Total Tokens" in h_log)
+
 print(f"\n{len(PASS)}/{len(PASS) + len(FAIL)} checks passed")
 if FAIL:
     print("failed: " + ", ".join(FAIL))

@@ -1,0 +1,21 @@
+{
+  "id": "E26",
+  "mode": "deprecated_no_migration",
+  "question": "How do I create a charge on the v3 API using a card token?",
+  "api_version": "v3",
+  "needs_code": true,
+  "expect_refusal": false,
+  "must_include": [
+    "/v3/payment_intents",
+    "payment_method"
+  ],
+  "must_not_include_in_code": [
+    "source",
+    "tok_",
+    "/v3/charges"
+  ],
+  "reference": "POST /v3/payment_intents with payment_method=pm_...; source=tok_visa and the /v3/charges endpoint are removed in v3. The deprecation must be noted explicitly.",
+  "source": "failure_drill_week11",
+  "planted_trace_id": "trc11_planted_bad",
+  "prompt_version_fixed": "v2"
+}

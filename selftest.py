@@ -256,6 +256,57 @@ check("verdict cites key metrics and issues KILL verdict", any("kill" in line.lo
 h_log = (ROOT / "handoffs.log").read_text(encoding="utf-8")
 check("handoffs.log records per-hand-off token counts", "code_sample_generation" in h_log and "Total Tokens" in h_log)
 
+print("\nweek 11 observability, cost & failure→test loop")
+from week11.plant import plant_bad_trace, BAD_TRACE_ID  # noqa: E402
+from week11.drill import drill  # noqa: E402
+from week11.run_task import (  # noqa: E402
+    run_full_week11, run_eval_suite, run_eval_suite_fixed,
+    EVAL_CASE_PATH, DRILL_MD, TRACE_JSON, COST_MD, TENX_MD,
+)
+
+# Plant the bad trace (idempotent)
+tid = plant_bad_trace()
+check("bad trace planted with expected id", tid == BAD_TRACE_ID)
+
+# Drill finds the trace
+drill_result = drill()
+check("drill finds the planted trace", drill_result.get("trace_found") is not None)
+check("drill reports time-to-find in mm:ss format",
+      isinstance(drill_result.get("time_to_find_mmss"), str) and
+      ":" in drill_result.get("time_to_find_mmss", ""))
+check("drill names the slice that found it", bool(drill_result.get("slice_used")))
+
+# E26 eval case
+import json  # noqa: E402
+from week11.run_task import write_eval_case  # noqa: E402
+new_case = write_eval_case()
+check("E26 eval case created with correct id", new_case.get("id") == "E26")
+check("E26 eval case targets deprecation mode",
+      new_case.get("mode") == "deprecated_no_migration")
+
+# RED suite: new case uses bad answer → should fail
+red = run_eval_suite(include_new_case=True)
+green = run_eval_suite_fixed()
+check("suite is RED before fix (new case fails)",
+      red["failed"] >= 1,
+      f"failed={red['failed']}")
+check("suite is GREEN after fix (new case passes)",
+      green["passed"] > red["passed"] and green["failed"] < red["failed"],
+      f"red={red['passed']}/{red['total']} green={green['passed']}/{green['total']}")
+
+# Full pipeline writes deliverables
+w11 = run_full_week11()
+check("drill.md written", DRILL_MD.exists())
+check("trace.json written", TRACE_JSON.exists())
+check("cost_by_stage.md written", COST_MD.exists())
+check("tenx.md written", TENX_MD.exists())
+check("trace.json has context_ids field",
+      "context_ids" in json.loads(TRACE_JSON.read_text(encoding="utf-8")))
+check("cost_by_stage.md mentions retrieval stage",
+      "retrieval" in COST_MD.read_text(encoding="utf-8").lower())
+check("prompt version bumped v1 -> v2",
+      w11["prompt_version_before"] == "v1" and w11["prompt_version_after"] == "v2")
+
 print(f"\n{len(PASS)}/{len(PASS) + len(FAIL)} checks passed")
 if FAIL:
     print("failed: " + ", ".join(FAIL))

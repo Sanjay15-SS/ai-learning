@@ -11,7 +11,7 @@ Model: local Qwen2.5-3B-Instruct-4bit (MLX, greedy). Corpus: synthetic `ledgerli
 | wrong-version code samples (answers with code that fail the caller-version symbol check) | **10/12 = 83%** | **0/11 = 0%** |
 | all assertions pass | 0/12 | 12/12 |
 | mean cost / question (reference $) | $0.00350 | $0.00418 |
-| mean / p95 latency | 28.98s / 47.98s | 24.28s / 49.488s |
+| mean / p95 latency | 28.98s / 47.98s | 25.4s / 49.488s |
 
 n = 12 cases (same cases, same model, same prompts; `before` = no metadata filter, Stack Overflow shown raw, no code check, no guards).
 
@@ -42,7 +42,7 @@ The judge scores ONE thing assertions cannot (does the answer actually address t
 | mode | count | freq % | severity | one trace id |
 |---|---|---|---|---|
 | draft_wrong_version_code_caught_by_guard | 2 | 16.7 | high (caught; costs a repair call) | `trc12_0bfe2edc7a93` |
-| prose_contradicts_withheld_code **(NEW: created by integration)** | 1 | 8.3 | high | `trc12_8c1f5e3a5013` |
+| prose_contradicts_withheld_code **(NEW: created by integration)** | 1 | 8.3 | high | `trc12_2b04dbc33ffb` |
 | redactor_corrupts_code **(NEW: created by integration)** | found in dev, fixed before the eval run | - | high | `trc12_d54345f79f9e` (runs/found_redactor_corrupts_code.jsonl) |
 
 Before, for comparison:
@@ -83,7 +83,7 @@ Dropping SO removes the poison and costs recall; the bridge keeps SO for MATCHIN
 - Mean per question (after): 1.50 LLM calls, 2287 input + 379 output tokens.
 - Cost per question: $0 actual (local). Same tokens at list prices: claude-haiku-4-5 $0.00418, claude-sonnet-5 $0.00836, claude-opus-5 $0.02091.
 - 9,000 integrators × 5 q/day (assumption) = 45,000 q/day; peak (3× the 8h average) = **4.69 q/s**.
-- **What breaks first: serving throughput.** One Mac answers 0.0412 q/s (mean latency 24.28s, serial). Peak needs ~**114×** that. Moving to an API needs ~422 requests/min and ~643,242 input tokens/min at peak: compare those two numbers against the org's rate-limit tier before launch. Daily cost at Sonnet-class prices ≈ $376.2.
+- **What breaks first: serving throughput.** One Mac answers 0.0394 q/s (mean latency 25.4s, serial). Peak needs ~**119×** that. Moving to an API needs ~422 requests/min and ~643,242 input tokens/min at peak: compare those two numbers against the org's rate-limit tier before launch. Daily cost at Sonnet-class prices ≈ $376.2.
 - Second: latency. p95 49.488s is unusable in an IDE; the repair call adds a full LLM round-trip on every wrong-code answer.
 
 ## 8. What this suite does NOT cover

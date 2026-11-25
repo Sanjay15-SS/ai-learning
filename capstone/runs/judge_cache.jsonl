@@ -17,3 +17,5 @@
 {"key": "f0cf8f9b9983c145", "case_id": "C14", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001166}
 {"key": "f554ff5baa679558", "case_id": "C22", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001043}
 {"key": "de41c01ce2872378", "case_id": "C30", "verdict": "FAIL", "raw": "VERDICT: FAIL", "cost_usd": 0.001035}
+{"key": "e197345b5cca6b6d", "case_id": "C30", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.00103}
+{"key": "a48297a5b1b2c336", "case_id": "C30", "verdict": "FAIL", "raw": "VERDICT: FAIL", "cost_usd": 0.000958}

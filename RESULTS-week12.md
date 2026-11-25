@@ -25,7 +25,7 @@
 | Mode | Count | Freq % | Severity | Trace id |
 |---|---|---|---|---|
 | `draft_wrong_version_code_caught_by_guard` | 2 | 16.7% | high (caught; costs a repair call) | `trc12_0bfe2edc7a93` |
-| `prose_contradicts_withheld_code` 🆕 **integration-created** | 1 | 8.3% | high | `trc12_8c1f5e3a5013` |
+| `prose_contradicts_withheld_code` 🆕 **integration-created** | 1 | 8.3% | high | `trc12_2b04dbc33ffb` |
 | `redactor_corrupts_code` 🆕 **integration-created** | found in dev, fixed before the run | — | high | `trc12_d54345f79f9e` |
 
 **Before (parts glued naively), same cases:**
@@ -77,7 +77,7 @@ from ledgerline import Client
 | **Wrong-version code-sample rate** | **10/12 = 83%** | **0/11 = 0%** |
 | All assertions pass | 0/12 | 12/12 |
 | Mean cost / question (reference) | $0.00350 | $0.00418 |
-| Mean / p95 latency | 28.98s / 47.98s | 24.28s / 49.488s |
+| Mean / p95 latency | 28.98s / 47.98s | 25.4s / 49.488s |
 
 n = 12. Same model, same prompts. *Before* = no metadata filter, Stack Overflow shown raw, no code check, no guards. *After* = filter in code, SO as matching bridge, `sdk_version` pinned at the MCP hop, parse + symbol check + one repair, deprecation and removed-method guards.
 
@@ -236,8 +236,8 @@ Case `R01` promoted **word for word** from trace `trc12_d54345f79f9e` → `capst
 |---|---|
 | Questions/day (9,000 × 5, assumption) | 45,000 |
 | Peak (3× the 8 h average) | **4.69 q/s** |
-| One M1 serves | 0.0412 q/s |
-| **Shortfall → serving throughput breaks first** | **~114× capacity needed** |
+| One M1 serves | 0.0394 q/s |
+| **Shortfall → serving throughput breaks first** | **~119× capacity needed** |
 | On an API at peak | 422 req/min, 643,242 input tok/min — check against the org's rate-limit tier |
 | Daily cost at Sonnet-class prices | $376.2 |
 

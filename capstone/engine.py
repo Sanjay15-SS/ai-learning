@@ -257,6 +257,17 @@ def answer(question: str, sdk_version: Optional[str] = None, mode: str = "after"
                            f"_(code sample withheld: it failed the {ver} symbol check: "
                            f"{'; '.join(codecheck.check(m.group(1), ver)['errors'])})_"), ans)
             tr.event("code_withheld", errors=check["errors"])
+            # seam #15: the guard used to withhold the code but keep the model's prose, which went on
+            # recommending the withheld approach (C30: "or an asynchronous loop with `async for`",
+            # trace trc12_8c1f5e3a5013). Prose written around failing code is not trusted either:
+            # replace it with a plain statement built from the checker's own errors.
+            errs = list(dict.fromkeys(e for e in check2["errors"] or check["errors"]))
+            # No "salvaged" snippet either: the first version appended a block that passed the
+            # symbol check but read an invented `page.has_next` (trace trc12_179a8038f244).
+            ans = (f"SDK version: {ver}\nThis cannot be done the way it was asked in {ver}: "
+                   + "; ".join(errs) + ". The code sample was withheld because it would fail at "
+                   "runtime; nothing here suggests otherwise.")
+            tr.event("prose_replaced", errors=errs)
             check = codecheck.check_answer(ans, ver)
 
     prefix, notices = [], []

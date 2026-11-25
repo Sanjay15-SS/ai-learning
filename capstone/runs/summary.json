@@ -42,7 +42,7 @@
   "red_once_looks_like_code_stops_counting": 0,
   "judge_pass_rate": 0.917,
   "mean_cost_usd": 0.004181,
-  "mean_latency_s": 24.28,
+  "mean_latency_s": 25.4,
   "p95_latency_s": 49.488
  },
  "judge_agreement": {
@@ -61,7 +61,7 @@
    "count": 1,
    "freq_pct": 8.3,
    "severity": "high",
-   "trace_id": "trc12_8c1f5e3a5013"
+   "trace_id": "trc12_2b04dbc33ffb"
   }
  ],
  "taxonomy_before": [
@@ -171,8 +171,8 @@
  "tenx": {
   "questions_per_day": 45000,
   "peak_qps": 4.69,
-  "local_capacity_qps": 0.0412,
-  "macs_needed_at_peak": 114,
+  "local_capacity_qps": 0.0394,
+  "macs_needed_at_peak": 119,
   "peak_input_tokens_per_min": 643242,
   "peak_requests_per_min": 422,
   "daily_cost_at_sonnet": 376.2

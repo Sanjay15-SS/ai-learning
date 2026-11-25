@@ -124,6 +124,21 @@ def check(code: str, version: str) -> Dict:
                     elif sym == "connect":
                         conns.add(t.id)
 
+    # Result pages expose only .items and the version's cursor attribute. An invented one such as
+    # `page.has_next` passed the symbol check (C30 re-run, trace trc12_179a8038f244).
+    pages = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            ch = _chain(node.value.func)
+            if len(ch) >= 2 and ch[0] in clients and ch[-1] in ("search", "query", "list"):
+                pages |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                and node.value.id in pages and node.attr not in S.RESULT_ATTRS[major]
+                and node.attr not in ("next_page_token", "next_cursor")):
+            res["errors"].append(f"`.{node.attr}` is not an attribute of a result page in {version} "
+                                 f"(it has {', '.join(sorted(S.RESULT_ATTRS[major]))})")
+
     # The SDK is sync-only in every version: `await client.x()` / `async for .. in client.x()`
     # passes a pure symbol check but fails at runtime (found: trace trc12_84700673c026, C30).
     for node in ast.walk(tree):

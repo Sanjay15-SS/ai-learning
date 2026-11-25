@@ -62,7 +62,9 @@ def write_report() -> str:
                         "daily_cost_at_sonnet": round(q_day * cost_at["claude-sonnet-5"], 2)}}
     (RUNS / "summary.json").write_text(json.dumps(summary, indent=1))
 
-    ex = next((r for r in after if r["case_id"] == "C01"), after[0])
+    # the example must show the trace id crossing the MCP hop: prefer a case that called a tool
+    ex = next((r for r in after if r["tools_called"]), None) or next(
+        (r for r in after if r["case_id"] == "C01"), after[0])
     (HERE / "TRACE_EXAMPLE.json").write_text(json.dumps(full_trace(ex["trace_id"]), indent=1))
 
     L = []
@@ -103,7 +105,7 @@ def write_report() -> str:
     w("| mode | count | freq % | severity | one trace id |\n|---|---|---|---|---|")
     for t in tax_a:
         tag = " **(NEW: created by integration)**" if t["mode"] in (
-            "version_dropped_at_mcp_hop", "guard_withheld_needed_code", "redactor_corrupts_code") else ""
+            "version_dropped_at_mcp_hop", "guard_withheld_needed_code", "redactor_corrupts_code", "truncated_code_unchecked", "prose_contradicts_withheld_code") else ""
         w(f"| {t['mode']}{tag} | {t['count']} | {t['freq_pct']} | {t['severity']} | `{t['trace_id']}` |")
     w("| redactor_corrupts_code **(NEW: created by integration)** | found in dev, fixed before the eval run | - | high | "
       "`trc12_d54345f79f9e` (runs/found_redactor_corrupts_code.jsonl) |")

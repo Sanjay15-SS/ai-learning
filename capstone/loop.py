@@ -40,9 +40,9 @@ def closed_loop():
     print(f"\n== closed loop: {case['id']} <- {case['source']}\n   {case['question']}")
     result = {"case": case, "runs": []}
     try:
-        for label, guards in (("guard OFF (code_check disabled)", {"code_check": False}),
-                              ("guard ON  (parse + symbol table + one repair)", {"code_check": True})):
-            rec = engine.answer(case["question"], None, mode="after", case_id=case["id"], guards=guards)
+        for label, mode in (("without the fix (before: no version filter, no code check)", "before"),
+                             ("with the fix (after: filter + code check + repair + guards)", "after")):
+            rec = engine.answer(case["question"], None, mode=mode, case_id=case["id"])
             a = assertions(case, rec, read_log())
             ok = all(a.values())
             print(f"   {label}: {'GREEN' if ok else 'RED'}   trace={rec['trace_id']}   "

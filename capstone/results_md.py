@@ -27,7 +27,7 @@ def write_results(summary: dict) -> str:
     req = tr.get("request") or {}
     found = json.loads((RUNS / "found_redactor_corrupts_code.jsonl").read_text().splitlines()[0])
     c01b, c01a, c11a = _row(before, "C01"), _row(after, "C01"), _row(after, "C11")
-    new_modes = ("version_dropped_at_mcp_hop", "guard_withheld_needed_code", "redactor_corrupts_code")
+    new_modes = ("version_dropped_at_mcp_hop", "guard_withheld_needed_code", "redactor_corrupts_code", "truncated_code_unchecked", "prose_contradicts_withheld_code")
 
     L = []
     w = L.append
@@ -105,6 +105,24 @@ def write_results(summary: dict) -> str:
     w("| Category | Before | After |\n|---|---|---|")
     for k in sa["pass_by_category"]:
         w(f"| {k} | {sb.get('pass_by_category', {}).get(k, '-')} | {sa['pass_by_category'][k]} |")
+    run1 = E.load_rows("after_run1") if (RUNS / "eval_after_run1.jsonl").exists() else []
+    if run1:
+        s1 = E.summarize(run1)
+        t1 = {t["mode"]: t for t in E.taxonomy(run1)}
+        w("\n### Iteration: after-run 1 → stricter suite → after-run 2\n")
+        w("After-run 1 passed every assertion 12/12, but the judge failed C30. Reading that trace showed the "
+          "model writing the whole answer 2–3 times until `max_tokens`, leaving an **unclosed** code fence that the "
+          "code check never matched, so the `async for` code inside it was never checked. Two assertions "
+          "were added (`single_answer`, `code_fences_closed`), the unclosed fence now fails the code check, "
+          "and a dedupe guard keeps only the first answer. Run 1 re-scored under the stricter suite:\n")
+        w("| | after-run 1 (strict suite) | after-run 2 (with dedupe guard) |\n|---|---|---|")
+        w(f"| all assertions pass | {s1['symbol_checked_pass']}/{s1['n']} | {sa['symbol_checked_pass']}/{sa['n']} |")
+        w(f"| wrong-version code | {s1['wrong_version_code']} | {sa['wrong_version_code']} |")
+        d1 = t1.get("duplicated_answer", {}).get("count", 0)
+        d2 = next((t["count"] for t in summary["taxonomy_after"] if t["mode"] == "duplicated_answer"), 0)
+        w(f"| duplicated answers | {d1}/{s1['n']} | {d2}/{sa['n']} |")
+        w(f"\nRun-1 evidence: `capstone/runs/eval_after_run1.jsonl`; C30 trace "
+          f"`{t1.get('truncated_code_unchecked', {}).get('trace_id', 'trc12_b3abf1a7f1b5')}`.\n")
     w("\n### Judge agreement on integrated outputs\n")
     if "agreement" in agree:
         ok = "✅ clears 85%" if agree["agreement"] >= 0.85 else "❌ below 85% — judge needs another iteration"

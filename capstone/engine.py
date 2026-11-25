@@ -218,6 +218,14 @@ def answer(question: str, sdk_version: Optional[str] = None, mode: str = "after"
 
     # ------------------------------------------------------------------ guards
     ans = final
+    g.setdefault("dedupe", after)
+    if g["dedupe"] and ans.count("SDK version:") > 1:
+        # seam #10: the 3B model writes the whole answer 2-3 times (6/12 after-run-1 answers);
+        # the repeat runs into max_tokens and leaves a truncated, unchecked code block (C30).
+        first = ans.index("SDK version:")
+        second = ans.index("SDK version:", first + 1)
+        ans = ans[:second].rstrip()
+        tr.event("deduped_answer", kept_chars=len(ans), dropped_chars=len(final) - len(ans))
     check = codecheck.check_answer(ans, ver)
     with tr.span("code_check", enforced=g["code_check"]) as sp:
         sp.update(n_blocks=check["n_blocks"], ok=check["ok"], errors=check["errors"])

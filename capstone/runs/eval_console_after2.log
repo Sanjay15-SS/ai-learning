@@ -1,0 +1,21 @@
+== eval after ==
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 5318.97it/s]
+  C01  after  PASS  judge=PASS trc12_2915544979a9  []
+  C04  after  PASS  judge=PASS trc12_7aa2f1288dcf  []
+  C06  after  PASS  judge=PASS trc12_ff796c9576a0  []
+  C07  after  PASS  judge=PASS trc12_0bfe2edc7a93  []
+  C11  after  PASS  judge=PASS trc12_163a63180fc7  []
+  C13  after  PASS  judge=PASS trc12_516513ac490d  []
+  C14  after  PASS  judge=PASS trc12_1fe8f500a3c9  []
+  C18  after  PASS  judge=PASS trc12_afc0b4037f8f  []
+  C22  after  PASS  judge=PASS trc12_15e830788366  []
+  C24  after  PASS  judge=PASS trc12_52751ebc03e5  []
+  C28  after  PASS  judge=PASS trc12_f89da247ce64  []
+  C30  after  PASS  judge=FAIL trc12_8c1f5e3a5013  []
+
+== closed loop: R01 <- trace:trc12_d54345f79f9e
+   I'm on 2.4 - how do I paginate through all entries for an account?
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 3315.95it/s]
+   without the fix (before: no version filter, no code check): RED   trace=trc12_4fbe5218c031   failed=['cites_version', 'code_runs_in_version', 'deprecation_surfaced', 'mentions:page_token']
+     `client.search` does not exist in 2.4 (added in 3.0)
+   with the fix (after: filter + code check + repair + guards): GREEN   trace=trc12_b2e5690d272e   failed=[]

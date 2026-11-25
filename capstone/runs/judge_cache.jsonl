@@ -3,3 +3,17 @@
 {"key": "907f7f57296a6109", "case_id": "C06", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001347}
 {"key": "88fa03d75c048e4a", "case_id": "C07", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001141}
 {"key": "cd3639687a8d6778", "case_id": "C11", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001589}
+{"key": "c1fbd14c54383f57", "case_id": "C13", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001087}
+{"key": "74937303e44aaded", "case_id": "C14", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001238}
+{"key": "30464d97d7dde50a", "case_id": "C18", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001141}
+{"key": "8c8abe1dc036cbab", "case_id": "C22", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001158}
+{"key": "498ebbcc0ad2f819", "case_id": "C24", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001362}
+{"key": "f16902173306ed19", "case_id": "C28", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001244}
+{"key": "10c668fc831ac10b", "case_id": "C30", "verdict": "FAIL", "raw": "VERDICT: FAIL", "cost_usd": 0.001271}
+{"key": "e5b5c9bd92ae083e", "case_id": "C01", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001325}
+{"key": "4725c42cb7198f6f", "case_id": "C04", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001161}
+{"key": "4c45bb3b1da11464", "case_id": "C06", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001202}
+{"key": "d0be55e35d2a0733", "case_id": "C11", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001371}
+{"key": "f0cf8f9b9983c145", "case_id": "C14", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001166}
+{"key": "f554ff5baa679558", "case_id": "C22", "verdict": "PASS", "raw": "VERDICT: PASS", "cost_usd": 0.001043}
+{"key": "de41c01ce2872378", "case_id": "C30", "verdict": "FAIL", "raw": "VERDICT: FAIL", "cost_usd": 0.001035}

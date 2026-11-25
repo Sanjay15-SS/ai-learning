@@ -178,7 +178,13 @@ def check(code: str, version: str) -> Dict:
 def check_answer(answer: str, version: str) -> Dict:
     blocks = code_blocks(answer)
     results = [check(b, version) for b in blocks]
-    return {"n_blocks": len(blocks), "ok": all(r["parses"] and not r["errors"] for r in results),
+    if (answer or "").count("```") % 2:
+        # A truncated answer leaves an unclosed fence that CODE_BLOCK never matches, so the code
+        # inside escaped every check (C30 after-run, trace trc12_b3abf1a7f1b5). Fail it.
+        results.append({"parses": False, "errors": ["unclosed code block (truncated output): "
+                                                     "the code inside was never checked"],
+                        "deprecated": [], "symbols": []})
+    return {"n_blocks": len(results), "ok": all(r["parses"] and not r["errors"] for r in results),
             "blocks": results,
             "errors": [e for r in results for e in r["errors"]],
             "deprecated": [d for r in results for d in r["deprecated"]]}

@@ -64,6 +64,8 @@ def assertions(case: dict, rec: dict, log_lines=None) -> dict:
     if e.get("deprecation_or_new"):
         a["uses_current_api"] = any(w in ans for w in e["deprecation_or_new"])
     a["no_dead_api"] = not DEAD.search(ans)
+    a["single_answer"] = ans.count("SDK version:") <= 1          # seam #10: the model answers twice
+    a["code_fences_closed"] = ans.count("```") % 2 == 0          # truncated code escapes the check
     if e.get("secrets"):
         raw = json.dumps([l for l in (log_lines or []) if l.get("trace_id") == rec["trace_id"]])
         a["secrets_not_logged"] = not any(s in raw for s in e["secrets"])
@@ -143,7 +145,7 @@ def row_from_rec(c, rec, mode, use_judge, log_lines=None):
            "answer": rec["answer"], "tools_called": rec["tools_called"],
            "events": rec["events"], "cost_usd": rec["total_cost_usd"],
            "latency_s": rec["total_latency_s"], "version": rec["version"],
-           "has_code": rec["code_check"]["n_blocks"] > 0}
+           "has_code": codecheck.check_answer(rec["answer"], c["expect"]["version"])["n_blocks"] > 0}
     if use_judge:
         row["judge"] = judge(c, rec)["verdict"]
     return row
@@ -183,6 +185,24 @@ def run(mode="after", ids=None, use_judge=True, out=None, guards=None, include_r
                   f"{[k for k, v in a.items() if not v]}", flush=True)
     finally:
         engine.close_session()
+    return rows
+
+
+def rescore(mode, path=None):
+    """Re-apply the CURRENT assertions to the answers already produced, from the trace log.
+    No model calls: judge verdicts come from the judge cache (keyed on case + answer)."""
+    p = Path(path) if path else RUNS / f"eval_{mode}.jsonl"
+    if not p.exists():
+        return []
+    cases = {c["id"]: c for c in load_cases()}
+    log = read_log()
+    recs = {r["trace_id"]: r for r in log if r.get("kind") == "request"}
+    rows = []
+    for l in p.read_text().splitlines():
+        old = json.loads(l)
+        rec = recs[old["trace_id"]]
+        rows.append(row_from_rec(cases[old["case_id"]], rec, mode, "judge" in old, log))
+    p.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     return rows
 
 
@@ -237,7 +257,9 @@ SEVERITY = {"wrong_version_code": "critical", "removed_method_invented": "critic
             "version_misresolved": "critical", "version_dropped_at_mcp_hop": "high",
             "guard_withheld_needed_code": "medium", "redactor_corrupts_code": "high",
             "secret_leak": "critical", "dead_api_from_stackoverflow": "critical",
-            "missing_content": "medium"}
+            "missing_content": "medium", "duplicated_answer": "medium",
+            "truncated_code_unchecked": "critical", "prose_contradicts_withheld_code": "high",
+            "draft_wrong_version_code_caught_by_guard": "high (caught; costs a repair call)"}
 
 
 def classify(row) -> list:
@@ -258,6 +280,14 @@ def classify(row) -> list:
         modes.append("secret_leak")
     if a.get("code_present") is False and any(e["event"] == "code_withheld" for e in row["events"]):
         modes.append("guard_withheld_needed_code")
+    if a.get("single_answer") is False:
+        modes.append("duplicated_answer")
+    if a.get("code_fences_closed") is False:
+        modes.append("truncated_code_unchecked")
+    if row.get("judge") == "FAIL" and all(a.values()):
+        # assertions all pass, judge fails: on C30 the guard withheld the async code but the PROSE
+        # still recommends `async for` - the guard edits code, not prose (trace trc12_8c1f5e3a5013)
+        modes.append("prose_contradicts_withheld_code")
     if any(k.startswith("mentions:") and not v for k, v in a.items()) or a.get("code_present") is False \
             and "guard_withheld_needed_code" not in modes or a.get("uses_current_api") is False:
         modes.append("missing_content")
@@ -271,6 +301,10 @@ def taxonomy(rows) -> list:
         for m in classify(r):
             cnt[m] += 1
             ex.setdefault(m, r["trace_id"])
+        # the agent's FIRST draft failed the caller-version code check; the guard repaired it
+        if any(e["event"] in ("repair", "code_withheld") for e in r["events"]):
+            cnt["draft_wrong_version_code_caught_by_guard"] += 1
+            ex.setdefault("draft_wrong_version_code_caught_by_guard", r["trace_id"])
         # integration-created: the agent passed a different sdk_version over MCP than resolved
         if any(e["event"] == "tool_version_mismatch" for e in r["events"]):
             cnt["version_dropped_at_mcp_hop"] += 1

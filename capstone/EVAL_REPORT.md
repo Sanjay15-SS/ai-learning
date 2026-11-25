@@ -8,27 +8,32 @@ Model: local Qwen2.5-3B-Instruct-4bit (MLX, greedy). Corpus: synthetic `ledgerli
 
 | | before (parts glued naively) | after (filter + code check + guards) |
 |---|---|---|
-| wrong-version code samples (answers with code that fail the caller-version symbol check) | **7/7 = 100%** | **7/7 = 100%** |
-| all assertions pass | 0/7 | 0/7 |
-| mean cost / question (reference $) | $0.00244 | $0.00244 |
-| mean / p95 latency | 21.9s / 26.035s | 21.9s / 26.035s |
+| wrong-version code samples (answers with code that fail the caller-version symbol check) | **10/12 = 83%** | **0/11 = 0%** |
+| all assertions pass | 0/12 | 12/12 |
+| mean cost / question (reference $) | $0.00350 | $0.00418 |
+| mean / p95 latency | 28.98s / 47.98s | 24.28s / 49.488s |
 
-n = 7 cases (same cases, same model, same prompts; `before` = no metadata filter, Stack Overflow shown raw, no code check, no guards).
+n = 12 cases (same cases, same model, same prompts; `before` = no metadata filter, Stack Overflow shown raw, no code check, no guards).
 
 **Pass rate per category (assertions):**
 
 | category | before | after |
 |---|---|---|
-| removed_method | 0/3 | 0/3 |
-| wrong_version_code | 0/4 | 0/4 |
+| deprecation_unasked | 0/1 | 1/1 |
+| invented_api | 0/1 | 1/1 |
+| pii | 0/1 | 1/1 |
+| removed_method | 0/3 | 3/3 |
+| stale_stackoverflow | 0/1 | 1/1 |
+| version_resolution | 0/1 | 1/1 |
+| wrong_version_code | 0/4 | 4/4 |
 
 ### Bonus: what happens when 'looks like code' stops counting
 
-Before: **0/7** answers pass every other assertion with a code block that merely parses. With the parse + import + symbol-table + kwargs check against the caller's version, **0** of those go red → 0/7.
+Before: **0/12** answers pass every other assertion with a code block that merely parses. With the parse + import + symbol-table + kwargs check against the caller's version, **0** of those go red → 0/12.
 
 ## 2. Judge, re-checked on integrated outputs
 
-Judge pass rate (after): None. Agreement with hand labels: `{"status": "no labels yet - run: python3 -m capstone label"}`
+Judge pass rate (after): 0.917. Agreement with hand labels: `{"status": "no labels yet - run: python3 -m capstone label"}`
 
 The judge scores ONE thing assertions cannot (does the answer actually address the question, correctly). Code validity, version, citations, deprecations, and removed-method phrasing are assertions, never judged.
 
@@ -36,29 +41,28 @@ The judge scores ONE thing assertions cannot (does the answer actually address t
 
 | mode | count | freq % | severity | one trace id |
 |---|---|---|---|---|
-| wrong_version_code | 7 | 100.0 | critical | `trc12_2d2f3094ea07` |
-| uncited_or_wrong_version_citation | 6 | 85.7 | medium | `trc12_2d2f3094ea07` |
-| deprecation_not_surfaced | 2 | 28.6 | high | `trc12_2d2f3094ea07` |
-| missing_content | 2 | 28.6 | medium | `trc12_2d2f3094ea07` |
-| removed_method_invented | 2 | 28.6 | critical | `trc12_c1b25cb11861` |
+| draft_wrong_version_code_caught_by_guard | 2 | 16.7 | high (caught; costs a repair call) | `trc12_0bfe2edc7a93` |
+| prose_contradicts_withheld_code **(NEW: created by integration)** | 1 | 8.3 | high | `trc12_8c1f5e3a5013` |
 | redactor_corrupts_code **(NEW: created by integration)** | found in dev, fixed before the eval run | - | high | `trc12_d54345f79f9e` (runs/found_redactor_corrupts_code.jsonl) |
 
 Before, for comparison:
 
 | mode | count | freq % | trace id |
 |---|---|---|---|
-| wrong_version_code | 7 | 100.0 | `trc12_2d2f3094ea07` |
-| uncited_or_wrong_version_citation | 6 | 85.7 | `trc12_2d2f3094ea07` |
-| deprecation_not_surfaced | 2 | 28.6 | `trc12_2d2f3094ea07` |
-| missing_content | 2 | 28.6 | `trc12_2d2f3094ea07` |
-| removed_method_invented | 2 | 28.6 | `trc12_c1b25cb11861` |
+| uncited_or_wrong_version_citation | 11 | 91.7 | `trc12_2d2f3094ea07` |
+| wrong_version_code | 10 | 83.3 | `trc12_2d2f3094ea07` |
+| duplicated_answer | 5 | 41.7 | `trc12_1144406f2f85` |
+| removed_method_invented | 3 | 25.0 | `trc12_c1b25cb11861` |
+| deprecation_not_surfaced | 2 | 16.7 | `trc12_2d2f3094ea07` |
+| missing_content | 2 | 16.7 | `trc12_2d2f3094ea07` |
+| dead_api_from_stackoverflow | 1 | 8.3 | `trc12_a74f8487b524` |
 
 ## 4. Trajectory eval (after)
 
-n = 7. Tool-choice accuracy **0.143**, trajectory pass 0.143, outcome pass 0.0, **outcome − trajectory gap = -0.143**. Cases where the agent called no tool at all: 6.
+n = 12. Tool-choice accuracy **0.083**, trajectory pass 0.083, outcome pass 1.0, **outcome − trajectory gap = 0.917**. Cases where the agent called no tool at all: 9.
 
-- outcome OK but trajectory wrong (the guards rescued it): []
-- trajectory OK but outcome wrong: ['C04']
+- outcome OK but trajectory wrong (the guards rescued it): ['C01', 'C04', 'C06', 'C07', 'C11', 'C13', 'C14', 'C18', 'C22', 'C24', 'C30']
+- trajectory OK but outcome wrong: []
 
 ## 5. Stack Overflow: keep, drop, or bridge? (retrieval hit@4 on gold pages, no LLM)
 
@@ -76,11 +80,11 @@ Dropping SO removes the poison and costs recall; the bridge keeps SO for MATCHIN
 
 ## 7. Cost per question and the 10× plan
 
-- Mean per question (after): 1.14 LLM calls, 1685 input + 152 output tokens.
-- Cost per question: $0 actual (local). Same tokens at list prices: claude-haiku-4-5 $0.00244, claude-sonnet-5 $0.00489, claude-opus-5 $0.01222.
+- Mean per question (after): 1.50 LLM calls, 2287 input + 379 output tokens.
+- Cost per question: $0 actual (local). Same tokens at list prices: claude-haiku-4-5 $0.00418, claude-sonnet-5 $0.00836, claude-opus-5 $0.02091.
 - 9,000 integrators × 5 q/day (assumption) = 45,000 q/day; peak (3× the 8h average) = **4.69 q/s**.
-- **What breaks first: serving throughput.** One Mac answers 0.0457 q/s (mean latency 21.9s, serial). Peak needs ~**103×** that. Moving to an API needs ~321 requests/min and ~473,906 input tokens/min at peak: compare those two numbers against the org's rate-limit tier before launch. Daily cost at Sonnet-class prices ≈ $220.05.
-- Second: latency. p95 26.035s is unusable in an IDE; the repair call adds a full LLM round-trip on every wrong-code answer.
+- **What breaks first: serving throughput.** One Mac answers 0.0412 q/s (mean latency 24.28s, serial). Peak needs ~**114×** that. Moving to an API needs ~422 requests/min and ~643,242 input tokens/min at peak: compare those two numbers against the org's rate-limit tier before launch. Daily cost at Sonnet-class prices ≈ $376.2.
+- Second: latency. p95 49.488s is unusable in an IDE; the repair call adds a full LLM round-trip on every wrong-code answer.
 
 ## 8. What this suite does NOT cover
 

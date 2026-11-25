@@ -18,3 +18,16 @@
   C06  after  PASS  judge=PASS trc12_a5b1540130bb  []
   C07  after  PASS  judge=PASS trc12_b492011c9697  []
   C11  after  PASS  judge=PASS trc12_a3a4edaa0f0f  []
+  C13  after  PASS  judge=PASS trc12_309c4d20527e  []
+  C14  after  PASS  judge=PASS trc12_92557d6f825f  []
+  C18  after  PASS  judge=PASS trc12_bd04509edb2b  []
+  C22  after  PASS  judge=PASS trc12_37e5e2caaa08  []
+  C24  after  PASS  judge=PASS trc12_c380ffb399d1  []
+  C28  after  PASS  judge=PASS trc12_3b81f056f380  []
+  C30  after  PASS  judge=FAIL trc12_b3abf1a7f1b5  []
+
+== closed loop: R01 <- trace:trc12_d54345f79f9e
+   I'm on 2.4 - how do I paginate through all entries for an account?
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1865.24it/s]
+   guard OFF (code_check disabled): GREEN   trace=trc12_0991bf0c07f4   failed=[]
+   guard ON  (parse + symbol table + one repair): GREEN   trace=trc12_3337baad5aa0   failed=[]

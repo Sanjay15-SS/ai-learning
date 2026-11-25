@@ -1,20 +1,21 @@
 {
- "trace_id": "trc12_2d2f3094ea07",
+ "trace_id": "trc12_163a63180fc7",
  "request": {
   "kind": "request",
-  "trace_id": "trc12_2d2f3094ea07",
-  "ts": "2026-11-25T10:34:49+00:00",
-  "question": "I'm on 2.4 - how do I paginate through all entries for an account?",
-  "mode": "before",
-  "case_id": "C01",
+  "trace_id": "trc12_163a63180fc7",
+  "ts": "2026-11-25T10:54:08+00:00",
+  "question": "How do I call client.query() in 3.0?",
+  "mode": "after",
+  "case_id": "C11",
   "guards": {
-   "code_check": false,
-   "deprecations": false,
-   "removed_plain": false,
-   "pin_version": false
+   "code_check": true,
+   "deprecations": true,
+   "removed_plain": true,
+   "pin_version": true,
+   "dedupe": true
   },
-  "total_latency_s": 26.035,
-  "total_cost_usd": 0.002006,
+  "total_latency_s": 36.846,
+  "total_cost_usd": 0.006805,
   "spans": [
    {
     "span": "redact",
@@ -25,94 +26,134 @@
    },
    {
     "span": "resolve_version",
-    "start_s": 0.0,
-    "version": "2.4",
-    "source": "question",
+    "start_s": 0.001,
+    "version": "3.0",
+    "source": "question_mention",
     "assumed": false,
     "latency_s": 0.0,
     "cost_usd": 0.0
    },
    {
     "span": "rag.retrieve",
-    "start_s": 0.0,
-    "version_filter": false,
-    "so_mode": "raw",
+    "start_s": 0.001,
+    "version_filter": true,
+    "so_mode": "bridge",
     "chunks": [
-     "so04 [v2.x]",
-     "so03 [v1 (dead)]",
-     "so44 [v2.x]",
-     "so43 [v1 (dead)]"
+     "v3/pagination#0 [v3.0]",
+     "migration#2 [v2.x+v3.0]",
+     "v3/client#0 [v3.0]",
+     "v3/client#2 [v3.0]"
     ],
-    "latency_s": 0.02,
+    "latency_s": 0.003,
     "cost_usd": 0.0
    },
    {
     "span": "agent.lap1",
-    "start_s": 0.311,
-    "input_tokens": 1356,
-    "output_tokens": 130,
-    "cost_usd": 0.002006,
+    "start_s": 0.004,
+    "input_tokens": 1345,
+    "output_tokens": 163,
+    "cost_usd": 0.00216,
     "model": "mlx-community/Qwen2.5-3B-Instruct-4bit",
-    "latency_s": 25.718
+    "latency_s": 11.275
+   },
+   {
+    "span": "mcp.call.search_sdk_docs",
+    "start_s": 11.279,
+    "args": {
+     "query": "client.search",
+     "sdk_version": "3.0",
+     "k": 4
+    },
+    "is_error": false,
+    "latency_s": 0.037,
+    "cost_usd": 0.0
+   },
+   {
+    "span": "agent.lap2",
+    "start_s": 11.317,
+    "input_tokens": 2145,
+    "output_tokens": 500,
+    "cost_usd": 0.004645,
+    "model": "mlx-community/Qwen2.5-3B-Instruct-4bit",
+    "latency_s": 25.523
    },
    {
     "span": "code_check",
-    "start_s": 26.034,
-    "enforced": false,
+    "start_s": 36.846,
+    "enforced": true,
     "n_blocks": 1,
-    "ok": false,
-    "errors": [
-     "`client.search` does not exist in 2.4 (added in 3.0)"
-    ],
+    "ok": true,
+    "errors": [],
     "latency_s": 0.0,
     "cost_usd": 0.0
    }
   ],
-  "events": [],
+  "events": [
+   {
+    "event": "deduped_answer",
+    "at_s": 36.841,
+    "kept_chars": 1013,
+    "dropped_chars": 796
+   }
+  ],
   "version": {
-   "version": "2.4",
-   "source": "question",
+   "version": "3.0",
+   "source": "question_mention",
    "assumed": false
   },
-  "answer": "SDK version: 2.4\nTo paginate through all entries for an account in version 2.4, you need to use the `search` method with a cursor to fetch results in batches. The `search` method replaces the `query` method from version 2.0 to 2.3.\n\n```python\nfrom ledgerline import Client\n\nclient = Client(api_key=\"[REDACTED]\")\ncursor = None\nwhile True:\n    results = client.search(\"entries\", cursor=cursor)\n    for entry in results:\n        print(entry)\n    cursor = results.get(\"next_cursor\")\n    if not cursor:\n        break\n```\n\nSources:\n- [Ledgerline only returns 50 rows, how do i get the rest? (v2.x)](https://stackoverflow.com/q/6100524)\n- [ledgerline only returns 50 rows, how do I get the rest (v1 (dead))](https://stackoverflow.com/q/6100393)\n- [Ledgerline only returns 50 rows, how do i get the rest? (python 3) (v2.x)](https://stackoverflow.com/q/6105764)\n- [ledgerline only returns 50 rows, how do I get the rest (python 3) (v1 (dead))](https://stackoverflow.com/q/6105633)",
-  "raw_answer": "SDK version: 2.4\nTo paginate through all entries for an account in version 2.4, you need to use the `search` method with a cursor to fetch results in batches. The `search` method replaces the `query` method from version 2.0 to 2.3.\n\n```python\nfrom ledgerline import Client\n\nclient = Client(api_key=\"[REDACTED]\")\ncursor = None\nwhile True:\n    results = client.search(\"entries\", cursor=cursor)\n    for entry in results:\n        print(entry)\n    cursor = results.get(\"next_cursor\")\n    if not cursor:\n        break\n```",
-  "tools_called": [],
+  "answer": "`client.query()` no longer exists in 3.0 - it was removed in 3.0 (deprecated since 2.4). Here is the migration: use `client.search` (see the migration guide).\n\nSDK version: 3.0\nIn SDK 3.0, `client.query()` has been renamed to `client.search()`. The pagination token `page_token` is now referred to as `cursor`.\n\nYou can use the following code snippet as a reference:\n\n```python\nfrom ledgerline import Client\n\nclient = Client(api_key=\"LL_API_KEY\", timeout=30.0)\ncursor = None\nwhile True:\n    page = client.search(\"entries\", limit=200, cursor=cursor)\n    for entry in page.items:\n        print(entry[\"id\"])\n    cursor = page.next_cursor\n    if cursor is None:\n        break\n```\n\nYou can also refer to the sample code in the documentation for more examples:\n\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-0.py)\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-1.py)\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-2.py)\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-3.py)\n\nYou can adapt the sample code to your specific use case.\n\nSources:\n- [Pagination (cursor) (v3.0)](https://docs.ledgerline.example/sdk/python/v3/pagination)\n- [Migrating from 2.x to 3.0 (v2.x+v3.0)](https://docs.ledgerline.example/sdk/python/migration)\n- [Installing and creating a Client (v3.0)](https://docs.ledgerline.example/sdk/python/v3/client)\n- [Sample: search (3.0) (v3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-0.py)\n- [Sample: search (3.0) (v3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-1.py)",
+  "raw_answer": "SDK version: 3.0\nIn SDK 3.0, `client.query()` has been renamed to `client.search()`. The pagination token `page_token` is now referred to as `cursor`.\n\nYou can use the following code snippet as a reference:\n\n```python\nfrom ledgerline import Client\n\nclient = Client(api_key=\"LL_API_KEY\", timeout=30.0)\ncursor = None\nwhile True:\n    page = client.search(\"entries\", limit=200, cursor=cursor)\n    for entry in page.items:\n        print(entry[\"id\"])\n    cursor = page.next_cursor\n    if cursor is None:\n        break\n```\n\nYou can also refer to the sample code in the documentation for more examples:\n\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-0.py)\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-1.py)\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-2.py)\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-3.py)\n\nYou can adapt the sample code to your specific use case.\n\nSDK version: 3.0\nTo use `client.search()` for pagination, you can use the `cursor` parameter to fetch subsequent pages of results. Here is an example:\n\n```python\nfrom ledgerline import Client\n\nclient = Client(api_key=\"LL_API_KEY\", timeout=30.0)\ncursor = None\nwhile True:\n    page = client.search(\"entries\", limit=200, cursor=cursor)\n    for entry in page.items:\n        print(entry[\"id\"])\n    cursor = page.next_cursor\n    if cursor is None:\n        break\n```\n\nYou can also refer to the sample code in the documentation for more examples:\n\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-0.py)\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s30-search-1.py)\n- [Sample: search (3.0)](https://github.com/ledgerline/samples/blob/main/s",
+  "tools_called": [
+   {
+    "tool": "search_sdk_docs",
+    "args": {
+     "query": "client.search",
+     "sdk_version": "3.0",
+     "k": 4
+    },
+    "asked_version": "3.0"
+   }
+  ],
   "citations": [
    {
-    "chunk_id": "so04",
-    "source": "stackoverflow",
-    "version": "2.x",
-    "url": "https://stackoverflow.com/q/6100524"
+    "chunk_id": "v3/pagination#0",
+    "source": "docs",
+    "version": "3.0",
+    "url": "https://docs.ledgerline.example/sdk/python/v3/pagination"
    },
    {
-    "chunk_id": "so03",
-    "source": "stackoverflow",
-    "version": "1.x",
-    "url": "https://stackoverflow.com/q/6100393"
+    "chunk_id": "migration#2",
+    "source": "migration",
+    "version": "all",
+    "url": "https://docs.ledgerline.example/sdk/python/migration"
    },
    {
-    "chunk_id": "so44",
-    "source": "stackoverflow",
-    "version": "2.x",
-    "url": "https://stackoverflow.com/q/6105764"
+    "chunk_id": "v3/client#0",
+    "source": "docs",
+    "version": "3.0",
+    "url": "https://docs.ledgerline.example/sdk/python/v3/client"
    },
    {
-    "chunk_id": "so43",
-    "source": "stackoverflow",
-    "version": "1.x",
-    "url": "https://stackoverflow.com/q/6105633"
+    "chunk_id": "s30-search-0",
+    "source": "sample",
+    "version": "3.0",
+    "url": "https://github.com/ledgerline/samples/blob/main/s30-search-0.py"
+   },
+   {
+    "chunk_id": "s30-search-1",
+    "source": "sample",
+    "version": "3.0",
+    "url": "https://github.com/ledgerline/samples/blob/main/s30-search-1.py"
    }
   ],
   "code_check": {
    "n_blocks": 1,
-   "ok": false,
+   "ok": true,
    "blocks": [
     {
-     "version": "2.4",
+     "version": "3.0",
      "parses": true,
-     "errors": [
-      "`client.search` does not exist in 2.4 (added in 3.0)"
-     ],
+     "errors": [],
      "deprecated": [],
      "symbols": [
       "Client",
@@ -120,11 +161,24 @@
      ]
     }
    ],
-   "errors": [
-    "`client.search` does not exist in 2.4 (added in 3.0)"
-   ],
+   "errors": [],
    "deprecated": []
   }
  },
- "mcp_server_spans": []
+ "mcp_server_spans": [
+  {
+   "kind": "mcp_server_span",
+   "trace_id": "trc12_163a63180fc7",
+   "span": "mcp.server.search_sdk_docs",
+   "arguments": {
+    "query": "client.search",
+    "sdk_version": "3.0",
+    "k": 4
+   },
+   "latency_s": 0.0222,
+   "cost_usd": 0.0,
+   "is_error": false,
+   "trace_id_source": "client"
+  }
+ ]
 }

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ledgerline-sdk-docs": {
+      "command": "/ABSOLUTE/PATH/TO/ai-learning/.venv/bin/python",
+      "args": ["-m", "capstone.mcp_server"],
+      "cwd": "/ABSOLUTE/PATH/TO/ai-learning"
+    }
+  }
+}

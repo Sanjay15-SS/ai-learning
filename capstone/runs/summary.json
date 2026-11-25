@@ -1,0 +1,167 @@
+{
+ "before": {
+  "n": 7,
+  "assert_pass_rate": 0.0,
+  "pass_by_category": {
+   "removed_method": "0/3",
+   "wrong_version_code": "0/4"
+  },
+  "answers_with_code": 7,
+  "wrong_version_code_rate": 1.0,
+  "wrong_version_code": "7/7",
+  "looks_like_code_pass": 0,
+  "symbol_checked_pass": 0,
+  "red_once_looks_like_code_stops_counting": 0,
+  "judge_pass_rate": null,
+  "mean_cost_usd": 0.002444,
+  "mean_latency_s": 21.9,
+  "p95_latency_s": 26.035
+ },
+ "after": {
+  "n": 7,
+  "assert_pass_rate": 0.0,
+  "pass_by_category": {
+   "removed_method": "0/3",
+   "wrong_version_code": "0/4"
+  },
+  "answers_with_code": 7,
+  "wrong_version_code_rate": 1.0,
+  "wrong_version_code": "7/7",
+  "looks_like_code_pass": 0,
+  "symbol_checked_pass": 0,
+  "red_once_looks_like_code_stops_counting": 0,
+  "judge_pass_rate": null,
+  "mean_cost_usd": 0.002444,
+  "mean_latency_s": 21.9,
+  "p95_latency_s": 26.035
+ },
+ "judge_agreement": {
+  "status": "no labels yet - run: python3 -m capstone label"
+ },
+ "taxonomy_after": [
+  {
+   "mode": "wrong_version_code",
+   "count": 7,
+   "freq_pct": 100.0,
+   "severity": "critical",
+   "trace_id": "trc12_2d2f3094ea07"
+  },
+  {
+   "mode": "uncited_or_wrong_version_citation",
+   "count": 6,
+   "freq_pct": 85.7,
+   "severity": "medium",
+   "trace_id": "trc12_2d2f3094ea07"
+  },
+  {
+   "mode": "deprecation_not_surfaced",
+   "count": 2,
+   "freq_pct": 28.6,
+   "severity": "high",
+   "trace_id": "trc12_2d2f3094ea07"
+  },
+  {
+   "mode": "missing_content",
+   "count": 2,
+   "freq_pct": 28.6,
+   "severity": "medium",
+   "trace_id": "trc12_2d2f3094ea07"
+  },
+  {
+   "mode": "removed_method_invented",
+   "count": 2,
+   "freq_pct": 28.6,
+   "severity": "critical",
+   "trace_id": "trc12_c1b25cb11861"
+  }
+ ],
+ "taxonomy_before": [
+  {
+   "mode": "wrong_version_code",
+   "count": 7,
+   "freq_pct": 100.0,
+   "severity": "critical",
+   "trace_id": "trc12_2d2f3094ea07"
+  },
+  {
+   "mode": "uncited_or_wrong_version_citation",
+   "count": 6,
+   "freq_pct": 85.7,
+   "severity": "medium",
+   "trace_id": "trc12_2d2f3094ea07"
+  },
+  {
+   "mode": "deprecation_not_surfaced",
+   "count": 2,
+   "freq_pct": 28.6,
+   "severity": "high",
+   "trace_id": "trc12_2d2f3094ea07"
+  },
+  {
+   "mode": "missing_content",
+   "count": 2,
+   "freq_pct": 28.6,
+   "severity": "medium",
+   "trace_id": "trc12_2d2f3094ea07"
+  },
+  {
+   "mode": "removed_method_invented",
+   "count": 2,
+   "freq_pct": 28.6,
+   "severity": "critical",
+   "trace_id": "trc12_c1b25cb11861"
+  }
+ ],
+ "trajectory": {
+  "n": 7,
+  "tool_choice_accuracy": 0.143,
+  "trajectory_pass": 0.143,
+  "outcome_pass": 0.0,
+  "outcome_minus_trajectory_gap": -0.143,
+  "outcome_ok_but_trajectory_wrong": [],
+  "trajectory_ok_but_outcome_wrong": [
+   "C04"
+  ],
+  "no_tool_called": 6
+ },
+ "so_ablation": {
+  "drop": {
+   "hit_at_4": "20/29",
+   "hit_rate": 0.69,
+   "cases_with_SO_text_in_context": 0,
+   "cases_with_wrong_version_chunk": 0
+  },
+  "raw_unfiltered (before)": {
+   "hit_at_4": "5/29",
+   "hit_rate": 0.172,
+   "cases_with_SO_text_in_context": 24,
+   "cases_with_wrong_version_chunk": 26
+  },
+  "bridge (after)": {
+   "hit_at_4": "27/29",
+   "hit_rate": 0.931,
+   "cases_with_SO_text_in_context": 0,
+   "cases_with_wrong_version_chunk": 0
+  }
+ },
+ "cost": {
+  "mean_cost_usd_reference": 0.002444,
+  "mean_input_tokens": 1685,
+  "mean_output_tokens": 152,
+  "mean_llm_calls": 1.14,
+  "cost_per_question_at": {
+   "claude-haiku-4-5": 0.00244,
+   "claude-sonnet-5": 0.00489,
+   "claude-opus-5": 0.01222
+  }
+ },
+ "tenx": {
+  "questions_per_day": 45000,
+  "peak_qps": 4.69,
+  "local_capacity_qps": 0.0457,
+  "macs_needed_at_peak": 103,
+  "peak_input_tokens_per_min": 473906,
+  "peak_requests_per_min": 321,
+  "daily_cost_at_sonnet": 220.05
+ }
+}

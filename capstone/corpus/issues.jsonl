@@ -1,0 +1,5 @@
+{"id": "GH-412", "sdk_version": "3.0", "title": "search_iter stops one page early when page_size > 500", "body": "search_iter(page_size=1000) silently caps at 500 and stops after the first cursor. Workaround: page_size<=500."}
+{"id": "GH-398", "sdk_version": "2.x", "title": "query_all emits DeprecationWarning on every page in 2.4", "body": "Expected: one warning per process. Workaround: warnings.filterwarnings."}
+{"id": "GH-377", "sdk_version": "3.0", "title": "TypeError: Client() missing required keyword-only argument 'timeout'", "body": "Upgrading from 2.x. timeout is required in 3.0, see migration guide section 1."}
+{"id": "GH-366", "sdk_version": "2.x", "title": "Client hangs indefinitely without timeout", "body": "2.x default timeout is None. Pass timeout=30."}
+{"id": "GH-351", "sdk_version": "3.0", "title": "webhooks.verify DeprecationWarning but docs still show it", "body": "verify() is deprecated in 3.0 and removed in 3.2; use construct_event()."}

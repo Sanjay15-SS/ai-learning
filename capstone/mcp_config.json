@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ledgerline-sdk-docs": {
+      "command": "python3",
+      "args": ["-m", "capstone.mcp_server"]
+    }
+  }
+}

@@ -1,3 +1,5 @@
+> **Week 12 Capstone (Variant E, SDK Docs Answer Engine)** → [capstone/README.md](capstone/README.md). One command: `python3 -m capstone all`.
+
 # Task Set E — Ledgerline docs assistant (Weeks 6 and 7)
 
 A docs assistant for a fictional payments API ("Ledgerline") with a **v2** and a **v3**,

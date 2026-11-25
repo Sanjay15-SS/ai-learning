@@ -11,3 +11,10 @@
   C22  before FAIL  judge=-    trc12_aef1e8de0bfb  ['cites_version', 'code_runs_in_version']
   C24  before FAIL  judge=-    trc12_a74f8487b524  ['cites_version', 'code_runs_in_version', 'no_dead_api']
   C28  before FAIL  judge=-    trc12_1e94d497654a  ['cites_version']
+  C30  before FAIL  judge=-    trc12_123cc24e3d33  ['cites_version', 'code_runs_in_version', 'removed_said_plainly']
+== eval after ==
+  C01  after  PASS  judge=PASS trc12_ad3b9c6cbfc0  []
+  C04  after  PASS  judge=PASS trc12_2e63fef0ab3e  []
+  C06  after  PASS  judge=PASS trc12_a5b1540130bb  []
+  C07  after  PASS  judge=PASS trc12_b492011c9697  []
+  C11  after  PASS  judge=PASS trc12_a3a4edaa0f0f  []
